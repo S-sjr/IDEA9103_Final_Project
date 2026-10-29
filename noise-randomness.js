@@ -13,7 +13,13 @@
 //                 takes a random blue (deep → light) and patches of colour
 //                 drift with noise; thin clouds form, drift and dissolve at
 //                 random
-//   (water and grass movement: next iteration)
+//     · Water   – calm and rough moments alternate (noise + random surges);
+//                 flow particles keep repainting the river along a noise
+//                 current (after Petros Vrellis' Starry Night animation);
+//                 golden particles shimmer inside each column of light with
+//                 random strength; the whole surface wavers; sparkles and
+//                 ripple rings appear at random places, sizes and times
+//   (grass movement: next iteration)
 //
 // RANDOMNESS (chosen once, when the painting is built)
 //   randomSeed() + noiseSeed() → one seed number reproduces the whole work
@@ -21,7 +27,9 @@
 //              painting order, personal noise offsets and speeds
 // PERLIN NOISE (read every frame with small time steps → smooth motion)
 //   noise(x, y, t)      shared fields: neighbouring strokes move together
-//   noise(offset + t)   each stroke's own small wobble
+//   noise(offset + t)   personal flutter / shimmer
+//   (plus random "surges": at random moments the water gets a random
+//    extra push that slowly dies down)
 //
 // FOUR LAYERS OF STROKES (like a painter working from big to small)
 //   1. underpainting – big soft strokes, cover the canvas, never move
@@ -32,6 +40,10 @@
 // HOW sketch.js USES THIS FILE
 //   setup():  initializeNoiseRandomness(paintingImage);  (after createCanvas)
 //   draw():   displayNoiseRandomness();
+//
+// HOOKS FOR THE OTHER MECHANICS (bottom of file)
+//   Audio (Jiarong): setWaterRippleScale(n)
+//   Input (Tao):     disturbWater(x, y)   (starts a ripple ring)
 //
 // TECHNIQUES FROM OUTSIDE THE COURSE (explained where they are used)
 //   · drawingContext — the browser's Canvas 2D API, used directly because
@@ -69,7 +81,8 @@ const PAINT_IN_SECONDS = 3.0;   // the opening "painting itself" animation
 
 // How strongly each region moves (1 = default)
 let motionSettings = {
-  skyFlow: 1
+  skyFlow: 1,
+  waterFloat: 1
 };
 
 // Regions of the painting as ratios of width/height
@@ -130,11 +143,19 @@ let canvasGrain;            // fine canvas texture over the paint
 const FIELD_COLUMNS = 72;
 const FIELD_ROWS = 56;
 let skyField;               // sky turn + slide + colour drift
+let waveRows;               // water: sideways offset for every 2px row
+let waterSwell = 0;         // overall water movement right now (noise + surges)
+let waterSurge = 0;         // random surge of waves, fades away
 
 // 1D Perlin curve sampled once; personal motion reads it with an offset
 // (same values as calling noise() each time, far cheaper for 30k strokes)
 const NOISE_TABLE_SIZE = 4096;
 let noiseTable;
+
+let externalInfluence = {
+  waterRippleScale: 1
+};
+
 
 // ---------------------------------------------------------------------
 // ENTRY FUNCTIONS
@@ -240,9 +261,16 @@ function initializeNoiseRandomness(sourceImage, seed) {
   staticPaintedCount = 0;
   finePaintedCount = 0;
   patchLayer = buildOriginalPatches(sourceImage);
+  waterTrail = createGraphics(width, height);
+  waterTrail.pixelDensity(1);
+  waterColourSource = colourSources.detail;
+  buildWaterParticles();
   canvasGrain = buildCanvasGrain();
 
   skyField = new Float32Array(FIELD_COLUMNS * FIELD_ROWS * 3);
+  waveRows = new Float32Array(ceil(height / WAVE_ROW) + 1);
+  waterGlints = [];
+  waterRipples = [];
   paintInStart = millis();
 }
 
@@ -258,6 +286,11 @@ function displayNoiseRandomness() {
   // 2. Shared noise for this frame
   updateNoiseFields();
 
+  // 2b. Particles keep repainting the river, then the river wavers
+  //     as one surface (wave displacement)
+  updateWaterTrail(progress);
+  drawWaterSurface(ctx);
+
   // 3. Moving strokes
   for (let s of movingStrokes) s.update();
   let revealed = constrain(map(progress, 0.25, 1, 0, 1), 0, 1);
@@ -266,6 +299,9 @@ function displayNoiseRandomness() {
   drawSkyStrokes(ctx, revealed);
   drawBatches(ctx, revealed);
   ctx.restore();
+
+  // Random glints and ripple rings on the water
+  if (revealed > 0.5) updateAndDrawWaterLife(ctx);
 
   // The couple and boats, from the original painting
   ctx.save();
@@ -497,6 +533,316 @@ class BrushStroke {
 }
 
 // ---------------------------------------------------------------------
+// WATER: one moving surface + random life on it
+// ---------------------------------------------------------------------
+// The painted water (in staticLayer) is cut into thin horizontal rows and
+// each row is drawn shifted sideways. The shift comes from two layers of
+// Perlin noise (slow big swell + quicker small ripples), so the whole
+// river wavers smoothly like real water, and more strongly near the bank.
+// (Row-displacement is a common way to fake water refraction — it is the
+//  same idea as a "wave distortion" filter in image editors.)
+const WAVE_ROW = 2;            // px per row
+let waterGlints = [];
+let waterRipples = [];
+let waterTrail;              // p5.Graphics: the river, constantly repainted by particles
+let flowParticles = [];      // water particles carrying the painting's colours
+let lightParticles = [];     // golden particles held inside the columns of light
+let lightColumns = [];       // where the columns of light are
+let waterColourSource;       // colours read by the particles
+
+function updateWaveRows() {
+  let swell = waterSwell;
+  let strength = motionSettings.waterFloat * externalInfluence.waterRippleScale;
+  let top = TOWN_BOTTOM * height;
+  for (let r = 0; r < waveRows.length; r++) {
+    let y = r * WAVE_ROW;
+    let depth = constrain((y - top) / (height * 0.38), 0, 1);   // 0 far → 1 near
+    let big = noise(y * 0.022, flowTime * 0.55, 50) - 0.5;      // slow swell
+    let small = noise(y * 0.11, flowTime * 1.6, 90) - 0.5;      // quick ripples
+    waveRows[r] = (big * 2 * 16 + small * 2 * 5) * (0.3 + depth) * swell * strength * brushScale;
+  }
+}
+
+function waveOffsetAt(y) {
+  return waveRows[constrain(floor(y / WAVE_ROW), 0, waveRows.length - 1)];
+}
+
+function drawWaterSurface(ctx) {
+  let top = floor((TOWN_BOTTOM - 0.005) * height);
+  let bottom = ceil(0.87 * height);
+  ctx.save();
+  // clip to the river so the bank does not move
+  ctx.beginPath();
+  ctx.moveTo(0, top);
+  ctx.lineTo(width, top);
+  for (let i = NEAR_BANK_LINE.length - 1; i >= 0; i--) {
+    ctx.lineTo(NEAR_BANK_LINE[i][0] * width, NEAR_BANK_LINE[i][1] * height);
+  }
+  ctx.closePath();
+  ctx.clip();
+  let source = waterTrail.elt;
+  for (let y = top; y < bottom; y += WAVE_ROW) {
+    let dx = waveOffsetAt(y);
+    ctx.drawImage(source, 0, y, width, WAVE_ROW + 1, dx, y, width, WAVE_ROW + 1);
+  }
+  ctx.restore();
+}
+
+// ---- Flow particles (technique inspired by Petros Vrellis, "Starry Night
+// interactive animation", 2012 — https://artof01.com/vrellis/works/starry_night.html:
+// particles follow the painting's flow and leave fading paint trails, so
+// the picture is continuously re-drawn while you watch).
+//
+// Every frame the trail layer is gently faded back toward the painted
+// river (so trails never pile up), then each particle paints a short
+// segment from where it was to where it is now.
+
+function buildWaterParticles() {
+  // Columns of light: group the golden water pixels by column
+  lightColumns = [];
+  let columnCount = 90;
+  for (let c = 0; c < columnCount; c++) {
+    let x = (c + 0.5) / columnCount * width;
+    let golden = [];
+    for (let y = TOWN_BOTTOM * height; y < nearBankY(x / width) * height; y += 4) {
+      let col = readPixel(waterColourSource.img, x / waterColourSource.blur, y / waterColourSource.blur);
+      if (col[0] > 150 && col[1] > 130 && col[2] < 120) golden.push(y);
+    }
+    if (golden.length > 6) {
+      lightColumns.push({
+        x: x,
+        top: min(golden),
+        bottom: max(golden),
+        halfWidth: width / columnCount * 0.9,
+        strength: random(0.4, 1.8),          // random wriggle per column
+        offset: random(1000)
+      });
+    }
+  }
+
+  flowParticles = [];
+  let flowCount = floor(1400 * (width * height) / (1024 * 794));
+  for (let i = 0; i < flowCount; i++) flowParticles.push(new FlowParticle());
+  lightParticles = [];
+  if (lightColumns.length > 0) {
+    let lightCount = floor(700 * (width * height) / (1024 * 794));
+    for (let i = 0; i < lightCount; i++) lightParticles.push(new LightParticle());
+  }
+}
+
+function updateWaterTrail(progress) {
+  let tctx = waterTrail.drawingContext;
+  if (progress < 1) {
+    // during the intro the river simply follows the painting
+    tctx.globalAlpha = 1;
+    tctx.drawImage(staticLayer.elt, 0, 0);
+    return;
+  }
+  // fade a little back toward the painted river
+  tctx.globalAlpha = 0.045;
+  tctx.drawImage(staticLayer.elt, 0, 0);
+
+  // Each particle moves and adds its segment to a "bucket" (same colour,
+  // transparency level and width); every bucket is then drawn with one
+  // ctx.stroke() — far faster than drawing 2,000 lines one by one.
+  particleBuckets.clear();
+  for (let p of flowParticles) p.step();
+  for (let p of lightParticles) p.step();
+
+  tctx.save();
+  tctx.lineCap = 'round';
+  for (let bucket of particleBuckets.values()) {
+    tctx.globalAlpha = bucket.alpha;
+    tctx.strokeStyle = bucket.style;
+    tctx.lineWidth = bucket.width;
+    tctx.beginPath();
+    let seg = bucket.segments;
+    for (let i = 0; i < seg.length; i += 4) {
+      tctx.moveTo(seg[i], seg[i + 1]);
+      tctx.lineTo(seg[i + 2], seg[i + 3]);
+    }
+    tctx.stroke();
+  }
+  tctx.restore();
+}
+
+let particleBuckets = new Map();
+const ALPHA_LEVELS = 4;
+
+function addSegment(styleKey, style, alpha, lineWidth, x1, y1, x2, y2) {
+  let a = round(constrain(alpha, 0, 1) * ALPHA_LEVELS);
+  if (a === 0) return;
+  let w = lineWidth > 3 * brushScale ? 1 : 0;
+  let key = styleKey + '|' + a + '|' + w;
+  let bucket = particleBuckets.get(key);
+  if (!bucket) {
+    bucket = { style, alpha: a / ALPHA_LEVELS, width: (w ? 3.8 : 2.4) * brushScale, segments: [] };
+    particleBuckets.set(key, bucket);
+  }
+  bucket.segments.push(x1, y1, x2, y2);
+}
+
+class FlowParticle {
+  constructor() { this.respawn(); }
+
+  respawn() {
+    let u = random();
+    this.x = u * width;
+    this.y = random(TOWN_BOTTOM + 0.005, nearBankY(u) - 0.005) * height;
+    this.speed = random(0.5, 1.6) * brushScale;      // random speed
+    this.life = floor(random(40, 160));              // random life (frames)
+    this.age = 0;
+    this.size = random(2.2, 4.2) * brushScale;
+    this.alpha = random(0.25, 0.55);
+    this.colourIndex = -1;
+  }
+
+  step() {
+    let u = this.x / width, v = this.y / height;
+    // flow direction: mostly along the river, bending with Perlin noise
+    let bend = (noise(u * 3.5, v * 9, flowTime * 0.4) - 0.5) * 1.1;
+    let swell = 0.4 + waterSwell * 0.8;
+    let vx = cos(bend) * this.speed * swell * motionSettings.waterFloat * externalInfluence.waterRippleScale;
+    let vy = sin(bend) * this.speed * 0.35;
+    let nx = this.x + vx, ny = this.y + vy;
+
+    // pick up the colour under the particle (every few frames)
+    if (this.colourIndex < 0 || this.age % 6 === 0) {
+      let c = readPixel(waterColourSource.img, this.x / waterColourSource.blur, this.y / waterColourSource.blur);
+      this.colourIndex = nearestColour(palette, c[0] + 6, c[1] + 6, c[2] + 8);
+    }
+    let fade = sin(constrain(this.age / this.life, 0, 1) * PI);   // soft start and end
+    addSegment('w' + this.colourIndex, paletteStyles[this.colourIndex],
+               this.alpha * fade, this.size, this.x, this.y, nx, ny);
+
+    this.x = nx; this.y = ny;
+    this.age++;
+    let outside = this.x > width || this.x < 0 || this.y / height > nearBankY(this.x / width) || this.y / height < TOWN_BOTTOM;
+    if (this.age > this.life || outside) this.respawn();
+  }
+}
+
+const LIGHT_COLOURS = ['rgb(246,200,92)', 'rgb(240,214,120)', 'rgb(222,170,70)'];
+
+class LightParticle {
+  constructor() { this.respawn(); }
+
+  respawn() {
+    this.column = random(lightColumns);
+    this.x = this.column.x + random(-1, 1) * this.column.halfWidth;
+    this.y = random(this.column.top, this.column.bottom);
+    this.life = floor(random(15, 60));
+    this.age = 0;
+    this.size = random(1.6, 3.2) * brushScale;
+    this.brightness = random(0.25, 0.7);            // random flicker strength
+    this.colourIndex = floor(random(LIGHT_COLOURS.length));
+  }
+
+  step() {
+    let col = this.column;
+    // wriggle: noise that changes down the column and over time
+    let wriggle = noise(this.y * 0.05, flowTime * 1.8, col.offset) - 0.5;
+    // spring: pulled back toward the centre of its column
+    let target = col.x + wriggle * 2 * col.halfWidth * 1.6 * col.strength * (0.4 + waterSwell);
+    let nx = lerp(this.x, target, 0.25) + random(-0.4, 0.4);
+    let ny = this.y + random(-0.3, 0.3);
+
+    let fade = sin(constrain(this.age / this.life, 0, 1) * PI);
+    // short horizontal dab, like light broken by ripples
+    let half = random(2, 6) * brushScale;
+    addSegment('L' + this.colourIndex, LIGHT_COLOURS[this.colourIndex],
+               this.brightness * fade, this.size, nx - half, ny, nx + half, ny);
+
+    this.x = nx; this.y = ny;
+    this.age++;
+    if (this.age > this.life) this.respawn();
+  }
+}
+
+// A short bright sparkle on the water: random place, size and life
+class WaterGlint {
+  constructor() {
+    // most glints appear inside a column of light, some anywhere on water
+    if (lightColumns.length > 0 && random() < 0.75) {
+      let c = random(lightColumns);
+      this.x = c.x + random(-1, 1) * c.halfWidth;
+      this.y = random(c.top, c.bottom);
+    } else {
+      let u = random();
+      this.x = u * width;
+      this.y = random(TOWN_BOTTOM + 0.02, nearBankY(u) - 0.02) * height;
+    }
+    this.length = random(4, 14) * brushScale;
+    this.life = random(0.4, 1.8);               // seconds
+    this.age = 0;
+    this.warm = random() < 0.7;                  // golden or moonlight-white
+  }
+  update(dt) { this.age += dt; return this.age < this.life; }
+  draw(ctx) {
+    let t = this.age / this.life;
+    let a = sin(t * PI);                         // fade in, then out
+    let x = this.x + waveOffsetAt(this.y);
+    ctx.globalAlpha = 0.9 * a;
+    ctx.strokeStyle = this.warm ? 'rgb(255,226,140)' : 'rgb(230,240,255)';
+    ctx.lineWidth = 2.2 * brushScale;
+    line2d(ctx, x - this.length / 2, this.y, x + this.length / 2, this.y);
+    ctx.globalAlpha = 0.25 * a;
+    ctx.lineWidth = 6 * brushScale;
+    line2d(ctx, x - this.length * 0.3, this.y, x + this.length * 0.3, this.y);
+  }
+}
+
+// An expanding ring on the water: random place, size, speed
+class WaterRipple {
+  constructor(x, y, strong) {
+    let u = random();
+    this.x = (x === undefined) ? u * width : x;
+    this.y = (y === undefined) ? random(TOWN_BOTTOM + 0.05, nearBankY(u) - 0.03) * height : y;
+    let depth = constrain((this.y / height - TOWN_BOTTOM) / 0.38, 0, 1);
+    this.maxRadius = random(18, 55) * (0.5 + depth) * brushScale * (strong ? 1.6 : 1);
+    this.life = random(1.6, 3.2);
+    this.age = 0;
+    this.flatten = random(0.22, 0.32);           // seen at a low angle
+  }
+  update(dt) { this.age += dt; return this.age < this.life; }
+  draw(ctx) {
+    let t = this.age / this.life;
+    let ease = 1 - pow(1 - t, 2);
+    let a = (1 - t) * 0.45;
+    for (let k = 0; k < 2; k++) {               // two rings, one behind the other
+      let r = this.maxRadius * ease * (1 - k * 0.35);
+      if (r <= 1) continue;
+      ctx.globalAlpha = a * (1 - k * 0.4);
+      ctx.strokeStyle = 'rgb(205,225,245)';
+      ctx.lineWidth = (1.6 - k * 0.5) * brushScale;
+      ctx.beginPath();
+      ctx.ellipse(this.x + waveOffsetAt(this.y), this.y, r, r * this.flatten, 0, 0, TWO_PI);
+      ctx.stroke();
+    }
+  }
+}
+
+function updateAndDrawWaterLife(ctx) {
+  let dt = min(deltaTime / 1000, 0.1);
+  // random spawning: how many appear each moment is itself random
+  let glintRate = 10 * (0.3 + waterSwell);            // per second, on average
+  if (random() < glintRate * dt) waterGlints.push(new WaterGlint());
+  if (random() < glintRate * dt * 0.6) waterGlints.push(new WaterGlint());
+  if (random() < (0.5 + waterSwell * 0.6) * dt) waterRipples.push(new WaterRipple());
+
+  waterGlints = waterGlints.filter(g => g.update(dt));
+  waterRipples = waterRipples.filter(r => r.update(dt));
+
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (let r of waterRipples) r.draw(ctx);
+  ctx.globalCompositeOperation = 'screen';
+  for (let g of waterGlints) g.draw(ctx);
+  ctx.restore();
+}
+
+
+// ---------------------------------------------------------------------
 // CLASS 4: CloudWisp — a thin, soft cloud that drifts, forms and fades
 // ---------------------------------------------------------------------
 // Made of many soft, transparent "puffs" (a pre-drawn blurry oval) laid
@@ -600,6 +946,20 @@ function updateNoiseFields() {
     }
 
   }
+  updateSurges();
+  // noise curve made more contrasting (pow), plus random surges on top
+  let calmToRough = pow(noise(flowTime * 0.3, 1200), 2) * 2.2;
+  waterSwell = 0.12 + calmToRough + waterSurge;
+  updateWaveRows();
+}
+
+// RANDOM SURGES: at random moments (random() each frame) a surge of
+// random size starts and then slowly dies down. Together with the noise
+// curve this gives "big, small, big…" with no fixed rhythm.
+function updateSurges() {
+  let dt = min(deltaTime / 1000, 0.1);
+  if (random() < 0.12 * dt) waterSurge += random(0.6, 1.6);   // ~every 8 s
+  waterSurge *= 0.985;
 }
 
 function fieldIndex(u, v) {
@@ -868,3 +1228,18 @@ function lerpAngle(a, b, t) {
   return a + atan2(sin(b - a), cos(b - a)) * t;
 }
 
+
+// ---------------------------------------------------------------------
+// INTEGRATION HOOKS — for sketch.js and the other mechanics
+// ---------------------------------------------------------------------
+
+// Audio (Jiarong): bass → bigger water ripples, e.g. map(bass, 0, 255, 1, 3)
+function setWaterRippleScale(scale) {
+  externalInfluence.waterRippleScale = max(0, scale);
+}
+
+// Input (Tao): start a strong ripple ring on the water, e.g. on mouse
+// click: if (mouseY > height * 0.5) disturbWater(mouseX, mouseY);
+function disturbWater(x, y) {
+  if (waterRipples.length < 40) waterRipples.push(new WaterRipple(x, y, true));
+}
