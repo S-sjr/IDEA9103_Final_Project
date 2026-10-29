@@ -55,6 +55,10 @@ function setup() {
   oilSun = buildOilOrb('sun');
   oilMoon = buildOilOrb('moon');
 
+  // Mechanic 03 · Perlin Noise + Randomness (Tianyi Bo):
+  // rebuild the painting as living brush strokes (noise-randomness.js)
+  initializeNoiseRandomness(painting);
+
   startedAt = millis();
   ready = true;
 
@@ -79,7 +83,9 @@ function draw() {
 function renderScene(t) {
   // 每帧重画原图，避免叠加颜色不断累积
   blendMode(BLEND);
-  image(painting, 0, 0, width, height);
+  // Mechanic 03 (Tianyi Bo): the moving brush-stroke painting replaces
+  // the still image; the time effects below are drawn on top of it
+  displayNoiseRandomness();
 
   drawGradient(t);
 
