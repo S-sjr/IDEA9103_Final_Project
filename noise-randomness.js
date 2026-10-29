@@ -19,7 +19,10 @@
 //                 golden particles shimmer inside each column of light with
 //                 random strength; the whole surface wavers; sparkles and
 //                 ripple rings appear at random places, sizes and times
-//   (grass movement: next iteration)
+//     · Grass   – long soft blades on the near bank: big noise waves roll
+//                 through the whole patch, each blade sways and curls with
+//                 its own noise, gusts come at random moments with random
+//                 strength, and every blade has random flexibility
 //
 // RANDOMNESS (chosen once, when the painting is built)
 //   randomSeed() + noiseSeed() → one seed number reproduces the whole work
@@ -28,8 +31,8 @@
 // PERLIN NOISE (read every frame with small time steps → smooth motion)
 //   noise(x, y, t)      shared fields: neighbouring strokes move together
 //   noise(offset + t)   personal flutter / shimmer
-//   (plus random "surges": at random moments the water gets a random
-//    extra push that slowly dies down)
+//   (plus random "surges": at random moments the water or the wind gets
+//    a random extra push that slowly dies down)
 //
 // FOUR LAYERS OF STROKES (like a painter working from big to small)
 //   1. underpainting – big soft strokes, cover the canvas, never move
@@ -82,7 +85,8 @@ const PAINT_IN_SECONDS = 3.0;   // the opening "painting itself" animation
 // How strongly each region moves (1 = default)
 let motionSettings = {
   skyFlow: 1,
-  waterFloat: 1
+  waterFloat: 1,
+  grassSway: 1
 };
 
 // Regions of the painting as ratios of width/height
@@ -128,6 +132,8 @@ let fineStrokes = [];       // tiny detail strokes for fineLayer
 let movingStrokes = [];     // redrawn every frame
 let strokeBatches = [];     // movingStrokes grouped by colour + layer
 let cloudWisps = [];
+let grassBlades = [];
+let grassBatches = [];
 let palette = [];           // k-means colours
 let paletteStyles = [];     // the same colours as CSS strings
 
@@ -144,8 +150,11 @@ const FIELD_COLUMNS = 72;
 const FIELD_ROWS = 56;
 let skyField;               // sky turn + slide + colour drift
 let waveRows;               // water: sideways offset for every 2px row
+let windColumns;            // one wind value per column
+let windGust = 0;           // overall wind strength right now (noise + surges)
 let waterSwell = 0;         // overall water movement right now (noise + surges)
 let waterSurge = 0;         // random surge of waves, fades away
+let windSurge = 0;          // random gust of wind, fades away
 
 // 1D Perlin curve sampled once; personal motion reads it with an offset
 // (same values as calling noise() each time, far cheaper for 30k strokes)
@@ -247,6 +256,9 @@ function initializeNoiseRandomness(sourceImage, seed) {
   paletteStyles = palette.map(c => rgbString(...c));
   buildStrokeBatches();
 
+  // Grass blades on the near bank
+  buildGrassBlades(colourSources.detail);
+
   // Clouds: a few to start with, more appear at random later
   cloudWisps = [];
   for (let i = 0; i < 4; i++) cloudWisps.push(new CloudWisp(random(0.2, 0.7)));
@@ -271,6 +283,7 @@ function initializeNoiseRandomness(sourceImage, seed) {
   waveRows = new Float32Array(ceil(height / WAVE_ROW) + 1);
   waterGlints = [];
   waterRipples = [];
+  windColumns = new Float32Array(FIELD_COLUMNS);
   paintInStart = millis();
 }
 
@@ -303,11 +316,14 @@ function displayNoiseRandomness() {
   // Random glints and ripple rings on the water
   if (revealed > 0.5) updateAndDrawWaterLife(ctx);
 
-  // The couple and boats, from the original painting
+  // The couple and boats, from the original painting (under the grass)
   ctx.save();
   ctx.globalAlpha = constrain(map(progress, 0.6, 1, 0, 1), 0, 1);
   ctx.drawImage(patchLayer.elt, 0, 0, width, height);
   ctx.restore();
+
+  // Grass blades sway in front of the bank
+  if (revealed > 0) drawGrassBlades(ctx, revealed);
 
   // Fine details on top, so the motion never blurs boats and figures
   paintFineStrokes(constrain(map(progress, 0.5, 1, 0, 1), 0, 1));
@@ -415,8 +431,7 @@ class BrushStroke {
     // Still strokes: the underpainting, the town, and open water (the water
     // moves as one surface — see drawWaterSurface)
     this.isStatic = layerName === 'underpainting' || this.region === 'town' ||
-                    this.region === 'water' || this.region === 'reflection' ||
-                    this.region === 'grass';
+                    this.region === 'water' || this.region === 'reflection';
 
     // Direction: follow the painting, with each region's habit
     if (this.region === 'water' || this.region === 'reflection') {
@@ -501,6 +516,12 @@ class BrushStroke {
         this.currentShade = constrain(round(this.skyShade + shift), 0, SKY_SHADES.length - 1);
       }
 
+    } else if (this.region === 'grass') {
+      // root fixed, tip swings: shared wind + personal flutter
+      let wind = windColumns[columnIndex(u)];
+      angle += (wind * 0.8 + personal * 0.4) * this.swayAmount * motionSettings.grassSway;
+      this.setEnds(x, y, x + cos(angle) * length, y + sin(angle) * length);
+      return;
     }
 
     let dx = cos(angle) * length * 0.5;
@@ -531,6 +552,131 @@ class BrushStroke {
     line2d(ctx, this.lx1, this.ly1, this.lx2, this.ly2);
   }
 }
+
+// ---------------------------------------------------------------------
+// CLASS 3: GrassBlade — a long, thin, curving blade with a fixed root
+// ---------------------------------------------------------------------
+// Wind has two layers (idea from a p5.js reed-field piece on Xiaohongshu,
+// "芦海扁舟"): a LOW-frequency noise makes whole patches of grass rise and
+// fall together like waves, a MID-frequency noise adds each blade's own
+// small movement. Group waves first, individual movement second.
+const GRASS_SEGMENTS = 10;
+
+class GrassBlade {
+  constructor(x, y, colour) {
+    this.x = x;
+    this.y = y;
+    let depth = map(y / height, 0.76, 1, 0, 1, true);       // nearer = longer
+    this.height = random(20, 42) * (0.65 + depth * 0.8) * brushScale;
+    this.lean = random(0.05, 0.45);                          // rests leaning right
+    this.flexibility = random(0.5, 1.8);                     // random sway strength
+    this.softness = random(0.8, 1.8);                        // how much it curls
+    this.noiseOffset = random(NOISE_TABLE_SIZE);
+    this.appearAt = random(0.3, 1);
+    this.points = new Float32Array((GRASS_SEGMENTS + 1) * 2);
+    // painting colour pulled toward the bright yellow-greens of the bank
+    let target = random([[196, 206, 120], [170, 196, 112], [214, 210, 138], [150, 186, 150]]);
+    this.colour = [
+      constrain(lerp(colour[0], target[0], 0.55) + random(-12, 12), 0, 255),
+      constrain(lerp(colour[1], target[1], 0.55) + random(-12, 12), 0, 255),
+      constrain(lerp(colour[2], target[2], 0.55) + random(-12, 12), 0, 255)
+    ];
+  }
+
+  update() {
+    let u = this.x / width, v = this.y / height;
+    // low frequency: big rolling wave across the whole bank
+    let wave = (noise(u * 1.8 - flowTime * 0.55, v * 3, 500) - 0.5) * 2;
+    // mid frequency: this blade's own movement
+    let own = noiseTableAt(this.noiseOffset + flowTime * 260) - 0.5;
+    let bend = (wave * 1.3 * windGust + own * 0.7) * this.flexibility * motionSettings.grassSway;
+
+    let px = this.x, py = this.y;
+    this.points[0] = px; this.points[1] = py;
+    let step = this.height / GRASS_SEGMENTS;
+    for (let k = 1; k <= GRASS_SEGMENTS; k++) {
+      let t = k / GRASS_SEGMENTS;
+      // each segment also gets its own noise, so the blade curls softly
+      // (an S-shape that keeps changing) instead of bending stiffly
+      let curl = (noiseTableAt(this.noiseOffset + k * 28 + flowTime * 300) - 0.5) * 1.3 * this.softness;
+      // bending grows toward the tip, root stays still
+      // the top droops a little under its own weight, like soft reeds
+      let droop = this.lean * t * t * 0.8;
+      let angle = -HALF_PI + this.lean * t + droop + bend * pow(t, 1.4) + curl * t;
+      px += cos(angle) * step;
+      py += sin(angle) * step;
+      this.points[k * 2] = px; this.points[k * 2 + 1] = py;
+    }
+  }
+}
+
+function buildGrassBlades(colourSource) {
+  grassBlades = [];
+  let count = floor(4200 * (width * height) / (1024 * 794));
+  let tries = 0;
+  while (grassBlades.length < count && tries < count * 8) {
+    tries++;
+    let u = random(), v = random(0.76, 1.02);
+    if (v < nearBankY(u) + 0.01) continue;                 // only on the bank
+    let x = u * width, y = v * height;
+    let c = readPixel(colourSource.img, x / colourSource.blur, min(y, height - 1) / colourSource.blur);
+    // leave the couple visible: no blades rooted right in front of them
+    // (blades around grow over the window's soft edge)
+    let couple = ORIGINAL_PATCHES[0];
+    // (only around their upper bodies — the grass may cover their legs)
+    let du = (u - couple.cx) / (couple.rx * 0.6), dv = (v - (couple.cy - 0.02)) / (couple.ry * 0.55);
+    if (du * du + dv * dv < 1) continue;
+    grassBlades.push(new GrassBlade(x, y, c));
+  }
+  grassBlades.sort((a, b) => a.y - b.y);                   // far first
+
+  // Batch by colour so thousands of blades draw in a few calls
+  let grassPalette = buildPalette(grassBlades.map(b => b.colour), 14);
+  let groups = new Map();
+  for (let b of grassBlades) {
+    let k = nearestColour(grassPalette, ...b.colour);
+    let thick = b.height > 33 * brushScale ? 1 : 0;
+    let key = k + '_' + thick;
+    if (!groups.has(key)) {
+      let c = grassPalette[k];
+      groups.set(key, {
+        style: rgbString(c[0] + thick * 14, c[1] + thick * 14, c[2] + thick * 8),
+        lineWidth: (thick ? 2.8 : 2.0) * brushScale,
+        blades: []
+      });
+    }
+    groups.get(key).blades.push(b);
+  }
+  grassBatches = [...groups.values()];
+}
+
+function drawGrassBlades(ctx, revealed) {
+  for (let b of grassBlades) b.update();
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.globalAlpha = 0.6;
+  for (let batch of grassBatches) {
+    ctx.strokeStyle = batch.style;
+    ctx.lineWidth = batch.lineWidth;
+    ctx.beginPath();
+    for (let b of batch.blades) {
+      if (b.appearAt > revealed) continue;
+      let p = b.points;
+      ctx.moveTo(p[0], p[1]);
+      // smooth curve through the segment points
+      for (let k = 1; k < GRASS_SEGMENTS; k++) {
+        let mx = (p[k * 2] + p[k * 2 + 2]) / 2;
+        let my = (p[k * 2 + 1] + p[k * 2 + 3]) / 2;
+        ctx.quadraticCurveTo(p[k * 2], p[k * 2 + 1], mx, my);
+      }
+      ctx.lineTo(p[GRASS_SEGMENTS * 2], p[GRASS_SEGMENTS * 2 + 1]);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 
 // ---------------------------------------------------------------------
 // WATER: one moving surface + random life on it
@@ -946,11 +1092,18 @@ function updateNoiseFields() {
     }
 
   }
+  // Gusts: the overall wind strength itself is Perlin noise, so the
+  // grass sometimes barely moves and sometimes bends hard
   updateSurges();
   // noise curve made more contrasting (pow), plus random surges on top
   let calmToRough = pow(noise(flowTime * 0.3, 1200), 2) * 2.2;
   waterSwell = 0.12 + calmToRough + waterSurge;
+  windGust = 0.25 + pow(noise(flowTime * 0.35, 900), 1.5) * 2.2 + windSurge;
   updateWaveRows();
+  for (let c = 0; c < FIELD_COLUMNS; c++) {
+    // gusts travel across the bank from left to right
+    windColumns[c] = noise(c * 0.08 - flowTime * 0.8, 300) - 0.5;
+  }
 }
 
 // RANDOM SURGES: at random moments (random() each frame) a surge of
@@ -959,7 +1112,9 @@ function updateNoiseFields() {
 function updateSurges() {
   let dt = min(deltaTime / 1000, 0.1);
   if (random() < 0.12 * dt) waterSurge += random(0.6, 1.6);   // ~every 8 s
+  if (random() < 0.15 * dt) windSurge += random(0.6, 1.8);    // ~every 7 s
   waterSurge *= 0.985;
+  windSurge *= 0.98;
 }
 
 function fieldIndex(u, v) {
