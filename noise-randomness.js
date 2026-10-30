@@ -13,6 +13,9 @@
 //                 takes a random blue (deep → light) and patches of colour
 //                 drift with noise; thin clouds form, drift and dissolve at
 //                 random
+//     · Stars   – each star twinkles with its OWN random strength and speed;
+//                 the strength itself drifts, so some moments a star only
+//                 glimmers and other moments it flares with light rays
 //     · Water   – calm and rough moments alternate (noise + random surges);
 //                 flow particles keep repainting the river along a noise
 //                 current (after Petros Vrellis' Starry Night animation);
@@ -27,10 +30,11 @@
 // RANDOMNESS (chosen once, when the painting is built)
 //   randomSeed() + noiseSeed() → one seed number reproduces the whole work
 //   random() → stroke positions, length, slight colour variation,
-//              painting order, personal noise offsets and speeds
+//              painting order, personal noise offsets and speeds,
+//              each star's twinkle strength and speed
 // PERLIN NOISE (read every frame with small time steps → smooth motion)
 //   noise(x, y, t)      shared fields: neighbouring strokes move together
-//   noise(offset + t)   personal flutter / shimmer
+//   noise(offset + t)   personal flutter / shimmer / twinkle
 //   (plus random "surges": at random moments the water or the wind gets
 //    a random extra push that slowly dies down)
 //
@@ -45,7 +49,8 @@
 //   draw():   displayNoiseRandomness();
 //
 // HOOKS FOR THE OTHER MECHANICS (bottom of file)
-//   Audio (Jiarong): setWaterRippleScale(n)
+//   Time  (Chenlei): setStarVisibility(0..1)
+//   Audio (Jiarong): setWaterRippleScale(n), setStarTwinkleBoost(n)
 //   Input (Tao):     disturbWater(x, y)   (starts a ripple ring)
 //
 // TECHNIQUES FROM OUTSIDE THE COURSE (explained where they are used)
@@ -86,7 +91,8 @@ const PAINT_IN_SECONDS = 3.0;   // the opening "painting itself" animation
 let motionSettings = {
   skyFlow: 1,
   waterFloat: 1,
-  grassSway: 1
+  grassSway: 1,
+  starTwinkle: 1
 };
 
 // Regions of the painting as ratios of width/height
@@ -120,6 +126,17 @@ const SKY_SHADES = [
 ];
 const SKY_SHADE_STYLES = SKY_SHADES.map(c => 'rgb(' + c.join(',') + ')');
 
+// Star centres [x, y, size] — positions measured by Chenlei (scene_data.js)
+const STAR_POSITIONS = [
+  [0.049, 0.183, 0.9], [0.114, 0.037, 0.65], [0.181, 0.115, 0.65],
+  [0.258, 0.166, 1.0], [0.380, 0.120, 1.0], [0.475, 0.139, 0.85],
+  [0.548, 0.166, 1.0], [0.621, 0.224, 0.9], [0.676, 0.123, 0.9],
+  [0.688, 0.202, 0.9], [0.780, 0.132, 0.65], [0.852, 0.143, 0.7],
+  [0.917, 0.200, 0.85], [0.976, 0.226, 0.65], [0.865, 0.301, 0.7],
+  [0.660, 0.343, 0.6], [0.408, 0.347, 0.65], [0.394, 0.263, 0.6]
+];
+
+
 // ---------------------------------------------------------------------
 // GLOBAL STATE (kept between frames)
 // ---------------------------------------------------------------------
@@ -131,6 +148,7 @@ let patchLayer;             // original-painting windows (couple, boats)
 let fineStrokes = [];       // tiny detail strokes for fineLayer
 let movingStrokes = [];     // redrawn every frame
 let strokeBatches = [];     // movingStrokes grouped by colour + layer
+let twinkleStars = [];
 let cloudWisps = [];
 let grassBlades = [];
 let grassBatches = [];
@@ -162,7 +180,9 @@ const NOISE_TABLE_SIZE = 4096;
 let noiseTable;
 
 let externalInfluence = {
-  waterRippleScale: 1
+  starVisibility: 1,
+  waterRippleScale: 1,
+  starTwinkleBoost: 1
 };
 
 
@@ -263,6 +283,9 @@ function initializeNoiseRandomness(sourceImage, seed) {
   cloudWisps = [];
   for (let i = 0; i < 4; i++) cloudWisps.push(new CloudWisp(random(0.2, 0.7)));
 
+  // Stars
+  twinkleStars = STAR_POSITIONS.map(p => new TwinkleStar(p[0], p[1], p[2], colourSources.main));
+
   // Empty canvas to paint on
   staticLayer = createGraphics(width, height);
   staticLayer.pixelDensity(1);
@@ -329,9 +352,10 @@ function displayNoiseRandomness() {
   paintFineStrokes(constrain(map(progress, 0.5, 1, 0, 1), 0, 1));
   ctx.drawImage(fineLayer.elt, 0, 0, width, height);
 
-  // 4. Clouds drift across the sky
-  let cloudReveal = constrain(map(progress, 0.55, 1, 0, 1), 0, 1);
-  if (cloudReveal > 0) updateAndDrawClouds(ctx, cloudReveal);
+  // 4. Clouds drift across the sky, then the stars shine through
+  let starReveal = constrain(map(progress, 0.55, 1, 0, 1), 0, 1);
+  if (starReveal > 0) updateAndDrawClouds(ctx, starReveal);
+  for (let star of twinkleStars) star.display(ctx, starReveal);
 
   // 5. Canvas texture
   ctx.save();
@@ -552,6 +576,117 @@ class BrushStroke {
     line2d(ctx, this.lx1, this.ly1, this.lx2, this.ly2);
   }
 }
+
+// ---------------------------------------------------------------------
+// CLASS 2: TwinkleStar — Van Gogh star: core, halo of strokes, glow
+// ---------------------------------------------------------------------
+class TwinkleStar {
+  constructor(xRatio, yRatio, size, colourSource) {
+    this.xRatio = xRatio;
+    this.yRatio = yRatio;
+    this.size = size;
+
+    // random(): every star has its own character
+    this.twinkleStrength = random(0.3, 1.6);   // barely flickers ... flares
+    this.twinkleSpeed = random(0.5, 2.6);
+    this.noiseOffset = random(NOISE_TABLE_SIZE);
+    this.moodOffset = random(NOISE_TABLE_SIZE);   // slow change of strength
+    this.rayAngle = random(TWO_PI);
+
+    // Halo: two rings of short strokes laid around the centre
+    this.halo = [];
+    for (let ring = 0; ring < 2; ring++) {
+      let count = floor(random(10, 16)) + ring * 6;
+      for (let i = 0; i < count; i++) {
+        let a = (i / count) * TWO_PI + random(-0.2, 0.2);
+        let radius = (ring === 0 ? random(5, 9) : random(11, 17));
+        let px = constrain(xRatio * width + cos(a) * radius * brushScale, 0, width - 1);
+        let py = constrain(yRatio * height + sin(a) * radius * brushScale, 0, height - 1);
+        let c = readPixel(colourSource.img, px / colourSource.blur, py / colourSource.blur);
+        let warm = ring === 0 ? 0.65 : 0.35;    // inner ring more yellow
+        this.halo.push({
+          angle: a,
+          radius: radius,
+          tangent: random() < 0.6,                // swirl or ray
+          length: random(5, 9),
+          style: rgbString(lerp(c[0], 240, warm), lerp(c[1], 238, warm), lerp(c[2], 150, warm)),
+          offset: random(NOISE_TABLE_SIZE)
+        });
+      }
+    }
+  }
+
+  display(ctx, reveal) {
+    if (reveal <= 0) return;
+    let x = this.xRatio * width;
+    let y = this.yRatio * height;
+    let s = this.size * brushScale;
+
+    // Personal twinkle from Perlin noise, scaled by this star's random strength
+    let n = noiseTableAt(this.noiseOffset + flowTime * 140 * this.twinkleSpeed);
+    // the star's strength also wanders slowly: calm → bursting → calm
+    let mood = noiseTableAt(this.moodOffset + flowTime * 25);
+    let strength = this.twinkleStrength * (0.2 + 1.6 * mood) *
+                   motionSettings.starTwinkle * externalInfluence.starTwinkleBoost;
+    let twinkle = constrain(1 + (n - 0.45) * 2.6 * strength, 0.2, 3.2);
+    let light = externalInfluence.starVisibility * reveal;
+
+    // Glow first (behind the strokes)
+    let glowRadius = 30 * s * (0.5 + 0.75 * twinkle);
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    let g = ctx.createRadialGradient(x, y, 0, x, y, glowRadius);
+    let a = constrain(0.3 * twinkle * light, 0, 0.95);
+    g.addColorStop(0, 'rgba(255,248,200,' + a + ')');
+    g.addColorStop(0.35, 'rgba(210,235,150,' + a * 0.4 + ')');
+    g.addColorStop(1, 'rgba(180,220,160,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - glowRadius, y - glowRadius, glowRadius * 2, glowRadius * 2);
+    ctx.restore();
+
+    // Halo strokes breathe outwards with the twinkle
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 2.6 * s;
+    for (let h of this.halo) {
+      let wobble = noiseTableAt(h.offset + flowTime * 150 * this.twinkleSpeed) - 0.5;
+      let r = h.radius * s * (0.8 + 0.25 * twinkle);
+      let px = x + cos(h.angle) * r;
+      let py = y + sin(h.angle) * r;
+      let dir = h.tangent ? h.angle + HALF_PI + wobble * 0.6 : h.angle + wobble * 0.4;
+      let len = h.length * s * (0.7 + 0.4 * twinkle);
+      ctx.globalAlpha = 0.85 * reveal;
+      ctx.strokeStyle = h.style;
+      line2d(ctx, px - cos(dir) * len / 2, py - sin(dir) * len / 2,
+                  px + cos(dir) * len / 2, py + sin(dir) * len / 2);
+    }
+
+    // Flare: when a star bursts, four soft rays of light appear
+    let flare = constrain((twinkle - 1.4) / 1.2, 0, 1) * light;
+    if (flare > 0.02) {
+      ctx.globalCompositeOperation = 'screen';
+      ctx.strokeStyle = 'rgb(255,250,215)';
+      for (let k = 0; k < 4; k++) {
+        let a2 = this.rayAngle + k * HALF_PI;
+        let rayLength = (16 + 26 * flare) * s;
+        ctx.globalAlpha = 0.55 * flare;
+        ctx.lineWidth = (k % 2 === 0 ? 2.2 : 1.4) * s;
+        line2d(ctx, x - cos(a2) * rayLength, y - sin(a2) * rayLength,
+                    x + cos(a2) * rayLength, y + sin(a2) * rayLength);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // Bright core
+    ctx.globalAlpha = constrain(0.5 + 0.35 * twinkle, 0, 1) * reveal;
+    ctx.fillStyle = 'rgb(255,251,222)';
+    ctx.beginPath();
+    ctx.arc(x, y, 3.0 * s * (0.6 + 0.45 * twinkle), 0, TWO_PI);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
 
 // ---------------------------------------------------------------------
 // CLASS 3: GrassBlade — a long, thin, curving blade with a fixed root
@@ -1388,9 +1523,19 @@ function lerpAngle(a, b, t) {
 // INTEGRATION HOOKS — for sketch.js and the other mechanics
 // ---------------------------------------------------------------------
 
+// Time (Chenlei): star glow follows the night, 0 = day, 1 = full night
+function setStarVisibility(level) {
+  externalInfluence.starVisibility = constrain(level, 0, 1);
+}
+
 // Audio (Jiarong): bass → bigger water ripples, e.g. map(bass, 0, 255, 1, 3)
 function setWaterRippleScale(scale) {
   externalInfluence.waterRippleScale = max(0, scale);
+}
+
+// Audio (Jiarong): treble → stronger twinkle, e.g. map(treble, 0, 255, 1, 3)
+function setStarTwinkleBoost(boost) {
+  externalInfluence.starTwinkleBoost = max(0, boost);
 }
 
 // Input (Tao): start a strong ripple ring on the water, e.g. on mouse

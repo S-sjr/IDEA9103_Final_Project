@@ -85,6 +85,8 @@ function renderScene(t) {
   blendMode(BLEND);
   // Mechanic 03 (Tianyi Bo): the moving brush-stroke painting replaces
   // the still image; the time effects below are drawn on top of it
+  // (star glow follows Chenlei's night timing)
+  setStarVisibility(nightEffectVisibility(t));
   displayNoiseRandomness();
 
   drawGradient(t);
