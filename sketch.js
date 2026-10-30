@@ -71,13 +71,39 @@ function draw() {
 
   const elapsed = Math.max(0, millis() - startedAt);
 
-  // 取余数，实现每 15 秒自动重新开始
-  const cycleElapsed = elapsed % DURATION;
+  // 修改：通过新函数计算当前处于哪一个阶段
+  progress = cycleProgress(elapsed);
 
-  progress = cycleElapsed / DURATION;
-  effectSeconds = cycleElapsed / 1000;
+  // 修改：让闪烁、水波和云层使用连续运行的时钟
+  effectSeconds = elapsed / 1000;
 
   renderScene(progress);
+}
+
+function cycleProgress(elapsed) {
+  const cycleElapsed = Math.max(0, elapsed) % CYCLE_DURATION;
+
+  // 新增：前 5 秒保持日落画面
+  if (cycleElapsed < SUNSET_HOLD_DURATION) {
+    return 0;
+  }
+
+  // 新增：扣除开头停留的 5 秒，再计算后面的变化
+  const transitionElapsed = cycleElapsed - SUNSET_HOLD_DURATION;
+
+  // 第 5–20 秒：日落逐渐变成夜晚
+  if (transitionElapsed < DURATION) {
+    return transitionElapsed / DURATION;
+  }
+
+  // 第 20–25 秒：保持完整夜景
+  if (transitionElapsed < DURATION + NIGHT_HOLD_DURATION) {
+    return 1;
+  }
+
+  // 第 25–40 秒：夜晚逐渐回到日落
+  return 1 -
+    (transitionElapsed - DURATION - NIGHT_HOLD_DURATION) / DURATION;
 }
 
 function renderScene(t) {

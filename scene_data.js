@@ -4,6 +4,13 @@
 // ==================== 时间与效果参数 ====================
 
 const DURATION = 15000; // 每轮 15 秒
+// 新增：完整夜景停留 5 秒
+const NIGHT_HOLD_DURATION = 5000;
+const SUNSET_HOLD_DURATION = 5000; // 日落画面停留 5 秒
+
+// 新增：15 秒进入夜晚 + 5 秒停留 + 15 秒返回落日
+const CYCLE_DURATION =
+  DURATION * 2 + SUNSET_HOLD_DURATION + NIGHT_HOLD_DURATION;
 const CANVAS_WIDTH = 1024;
 const HORIZON = 0.43;
 const EFFECT_STRENGTH = 0.9;
