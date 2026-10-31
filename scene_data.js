@@ -3,14 +3,13 @@
 
 // ==================== 时间与效果参数 ====================
 
-const DURATION = 15000; // 每轮 15 秒
-// 新增：完整夜景停留 5 秒
-const NIGHT_HOLD_DURATION = 5000;
-const SUNSET_HOLD_DURATION = 5000; // 日落画面停留 5 秒
 
-// 新增：15 秒进入夜晚 + 5 秒停留 + 15 秒返回落日
+const DURATION = 15000;            // 日落到夜晚：15 秒
+const SUNSET_HOLD_DURATION = 5000; // 开头日落停留：5 秒
+const NIGHT_HOLD_DURATION = 210000; // 3 分 30 秒
+
 const CYCLE_DURATION =
-  DURATION * 2 + SUNSET_HOLD_DURATION + NIGHT_HOLD_DURATION;
+  SUNSET_HOLD_DURATION + DURATION + NIGHT_HOLD_DURATION;
 const CANVAS_WIDTH = 1024;
 const HORIZON = 0.43;
 const EFFECT_STRENGTH = 0.9;
@@ -24,15 +23,32 @@ const NIGHT_EFFECT_FULL_HOUR = 21.5;
 const OIL_ORB_SIZE = 224;
 const OIL_ORB_RADIUS = 64;
 
-// 太阳从云层上方开始，约 3.6 秒完全消失
-const SUN_START_Y = 0.18;
-const SUN_TRAVEL_END = 0.26;
-const SUN_FADE_START = 0.02;
-const SUN_FADE_END = 0.24;
+// 太阳：右侧 → 左侧
+const SUN_START_X = 0.90;
+const SUN_END_X = 0.30;
 
-// 太阳下沉时，从云前逐渐进入云后
-const SUN_FRONT_START = 0.08;
-const SUN_FRONT_END = 0.22;
+const SUN_START_Y = 0.18;
+const SUN_CONTROL_Y = 0.10; // 控制弧线高度
+const SUN_END_Y = 0.46;
+
+// 太阳在渐变过程的前半段完成下落
+const SUN_TRAVEL_END = 0.50;
+
+// 接近落点时快速淡出
+const SUN_FADE_START = 0.36;
+const SUN_FADE_END = SUN_TRAVEL_END;
+
+// 下落时逐渐进入云层后方
+const SUN_FRONT_START = 0.28;
+const SUN_FRONT_END = 0.46;
+
+// 月亮：从太阳落点附近升向左上方
+const MOON_APPEAR_START = SUN_TRAVEL_END;
+const MOON_START_X = SUN_END_X;
+const MOON_END_X = 0.14;
+
+const MOON_START_Y = 0.40;
+const MOON_END_Y = 0.12;
 
 // RGB 渐变随时间淡出，13.5 秒时完全消失
 const GRADIENT_FADE_START = 0;

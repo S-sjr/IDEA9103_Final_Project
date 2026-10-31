@@ -425,54 +425,74 @@ function drawOilOrb(sprite, x, y, radius, opacity) {
 function drawSun(t, layerOpacity = 1) {
   const travel = phase(t, 0, SUN_TRAVEL_END);
 
-  const opacity = (
-    1 - phase(t, SUN_FADE_START, SUN_FADE_END)
-  ) * EFFECT_STRENGTH * layerOpacity;
+  const opacity =
+    (1 - phase(t, SUN_FADE_START, SUN_FADE_END)) *
+    EFFECT_STRENGTH *
+    layerOpacity;
 
   if (opacity <= 0) return;
 
-  const x = width * 0.74;
-
-  const y = lerp(
-    height * SUN_START_Y,
-    height * 0.46,
+  // 水平位置：从右侧向左侧移动
+  const x = width * lerp(
+    SUN_START_X,
+    SUN_END_X,
     travel
   );
 
-  const radius = width * 0.027;
+  // 垂直位置：使用二次曲线形成弧形轨迹
+  const remaining = 1 - travel;
 
+  const y = height * (
+    remaining * remaining * SUN_START_Y +
+    2 * remaining * travel * SUN_CONTROL_Y +
+    travel * travel * SUN_END_Y
+  );
+
+  const radius = width * 0.027;
   const ctx = drawingContext;
+
   ctx.save();
 
-  // 地平线遮住下沉的太阳
+  // 将太阳限制在天空内，落下后由地平线遮挡
   ctx.beginPath();
   ctx.rect(0, 0, width, height * HORIZON);
   ctx.clip();
 
+  // 使用原有的油画太阳纹理
   drawOilOrb(oilSun, x, y, radius, opacity);
+
   ctx.restore();
 }
 
 function drawMoon(t) {
-  const rise = phase(t, 0.6, 1);
+  const rise = phase(t, MOON_APPEAR_START, 1);
 
   const opacity =
-    phase(t, 0.6, 0.88) * EFFECT_STRENGTH;
+    phase(t, MOON_APPEAR_START, 0.88) *
+    EFFECT_STRENGTH;
 
   if (opacity <= 0) return;
 
-  const x = width * 0.82;
+  // 水平位置：向左侧移动
+  const x = width * lerp(
+    MOON_START_X,
+    MOON_END_X,
+    rise
+  );
 
-  const y = lerp(
-    height * 0.36,
-    height * 0.12,
+  // 垂直位置：从地平线附近升到上空
+  const y = height * lerp(
+    MOON_START_Y,
+    MOON_END_Y,
     rise
   );
 
   const radius = width * 0.018;
 
+  // 使用原有的油画月亮纹理
   drawOilOrb(oilMoon, x, y, radius, opacity);
 }
+
 
 // ==================== 油画云层 ====================
 
