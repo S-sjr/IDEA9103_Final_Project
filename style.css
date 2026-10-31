@@ -37,3 +37,50 @@ body > canvas {
 #painting-source {
   visibility: hidden;
 }
+
+#volume-control {
+  position: fixed;
+  right: max(20px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #f6edda;
+  font: 12px/1.4 system-ui, sans-serif;
+}
+
+#volume-toggle {
+  width: 44px;
+  height: 44px;
+  border: 1px solid #ffffff40;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #101c2d80;
+  color: inherit;
+  opacity: 0.5;
+  cursor: pointer;
+  transition: opacity 180ms ease, background 180ms ease;
+}
+
+#volume-toggle:hover,
+#volume-toggle:focus-visible,
+#volume-toggle[aria-expanded="true"] {
+  opacity: 1;
+  background: #101c2dcc;
+}
+
+#volume-toggle:focus-visible { outline: 2px solid #e6c36b; outline-offset: 3px; }
+
+#volume-panel:not([hidden]) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid #ffffff26;
+  border-radius: 24px;
+  background: #101c2dcc;
+}
+
+#music-volume { width: min(110px, 26vw); accent-color: #e6c36b; cursor: pointer; }

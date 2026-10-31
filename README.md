@@ -18,7 +18,7 @@ python -m http.server 8000
 
 Requires no build step and no npm install. p5.js is bundled in `libraries/`.
 
-> **Current state:** the sketch runs on a 15-second automatic loop. The user-input and audio controls are still being wired in by their owners — see *Known gaps* below.
+> **Current state:** the sketch runs on a 15-second automatic loop. Background audio is connected; user-input controls are still being wired in — see *Known gaps* below.
 
 ## File structure
 
@@ -124,15 +124,14 @@ All are also commented at the point of use in the code.
 - **Mouse move** — pointer proximity will drive adjacent colours and mark density based on cursor distance.
 - **Space bar** — toggles between the segment grid and the source image.
 - **Click below the horizon** — `disturbWater(mouseX, mouseY)` starts a ripple ring at that point.
-- **Audio playback** — audio level / frequency will drive `setWaterRippleScale()` and `setStarTwinkleBoost()`.
 - **Window resize** — the canvas keeps the painting's 5407:4191 ratio and re-fits without re-rolling the seed, so the composition stays recognisable.
 
 ## Known gaps
 
 This is a work in progress as at commit `Noise+Randomness 4`:
 
-- `audio.js` is empty — Jiarong's mechanic is not yet implemented.
-- `index.html` does not yet load `input.js` or `audio.js`, so those mechanics do not yet run inside the group sketch.
+- `audio.js` now connects music playback and frequency analysis to the water and star hooks; see the audio section below.
+- `index.html` loads `audio.js`; `input.js` is still not connected to the group sketch.
 - `particle.js` and `randomnes.js` are empty leftovers from an earlier file-structure pass and can be deleted.
 - The rendering has **not** had a browser visual pass from the noise/randomness side yet; frame rate on large windows still needs checking.
 - Interface descriptions above marked "planned" should be verified against each owner's final code before submission.
@@ -140,3 +139,18 @@ This is a work in progress as at commit `Noise+Randomness 4`:
 ---
 
 *This README was drafted by Tianyi Bo with AI assistance, following the Week 13 GitHub submission requirements of the IDEA9103 major assignment brief.*
+
+
+## Audio mechanic — Jiarong Sun
+
+Music loops automatically in the background. A translucent circular speaker button in the bottom-right corner opens a volume slider. Click outside or press Escape to close it; the slider can also mute the music at zero. If the browser blocks autoplay, the first click on the painting or key press activates audio. Bass drives water motion and treble drives star twinkle continuously while the song plays. Stars become visible during the night portion of the existing 15-second cycle.
+
+`audio.js` uses the bundled p5.sound FFT with 1024 bins. It analyses 60–250 Hz for the water and 2000–8000 Hz for the stars, normalises the band energies to 0–1 with a small silence threshold, and smooths them with a 0.09-second attack and 0.35-second release. Water motion is scaled from 1 to 2.8 and star twinkle strength from 1 to 3 through Tianyi's existing hooks. When music is not playing, both multipliers smoothly return to 1. Time still controls star visibility. Audio loading is independent of painting initialization, so a failed song does not stop the visual scene.
+
+Tune frequency bands, gains and maximum boosts in `AUDIO_SETTINGS` at the top of `audio.js`. The analysis measures band energy, not beats or individual notes. Serve the folder over HTTP; the browser must support the supplied M4A encoding.
+
+Music: user-supplied file `Glimpse of Us.m4a`. Confirm the recording's artist, source and permitted use before finalising the submission credits.
+
+AI acknowledgement: OpenAI Codex assisted with the audio module, background playback, integration and documentation in this repository. Jiarong should review and understand the implementation and tune its artistic response before presenting it.
+
+Reference: [p5.sound FFT](https://p5js.org/reference/p5.sound/p5.FFT/), used through the locally bundled library.

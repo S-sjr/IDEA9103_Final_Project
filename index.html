@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -19,13 +19,27 @@
         src="assets/Starry_Night_Over_the_Rhone.jpeg"
         width="5407"
         height="4191"
-        alt="从日落到深夜自动循环的河岸油画"
+        alt="A riverside oil painting cycling from sunset to late night"
       >
+    </div>
+
+    <div id="volume-control">
+      <div id="volume-panel" hidden>
+        <label for="music-volume">Volume</label>
+        <input id="music-volume" type="range" min="0" max="1" step="0.01" value="0.5">
+      </div>
+      <button id="volume-toggle" type="button" aria-label="Adjust volume" aria-expanded="false" aria-controls="volume-panel" title="Adjust volume">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M11 5 6 9H3v6h3l5 4Z"/>
+          <path d="M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/>
+        </svg>
+      </button>
     </div>
 
     <script src="scene_data.js"></script>
     <script src="time.js"></script>
     <script src="noise-randomness.js"></script>
+    <script src="audio.js"></script>
     <script src="sketch.js"></script>
   </body>
 </html>

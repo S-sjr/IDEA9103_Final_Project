@@ -46,8 +46,8 @@ function setup() {
   frameRate(30);
 
   describe(
-    '每十五秒循环的河岸油画：太阳下沉，晚霞淡出，' +
-    '云层散开，月亮升起，星光和灯光倒影逐渐增强。'
+    'A riverside oil painting on a fifteen-second loop: the sun sets, sunset colours fade, ' +
+    'clouds disperse, the moon rises, and stars and reflected lights gradually brighten.'
   );
 
   // 油画纹理只生成一次，避免每帧闪烁
@@ -58,6 +58,7 @@ function setup() {
   // Mechanic 03 · Perlin Noise + Randomness (Tianyi Bo):
   // rebuild the painting as living brush strokes (noise-randomness.js)
   initializeNoiseRandomness(painting);
+  initializeAudio();
 
   startedAt = millis();
   ready = true;
@@ -68,6 +69,7 @@ function setup() {
 
 function draw() {
   if (!ready) return;
+  updateAudio();
 
   const elapsed = Math.max(0, millis() - startedAt);
 
