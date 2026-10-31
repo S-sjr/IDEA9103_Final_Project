@@ -1040,8 +1040,12 @@ class LightParticle {
     let fade = sin(constrain(this.age / this.life, 0, 1) * PI);
     // short horizontal dab, like light broken by ripples
     let half = random(2, 6) * brushScale;
+    // Tao: temporary input offset; natural positions remain unchanged.
+    let inputOffset = getRiverInputOffset(nx, ny);
+    let drawX = nx + inputOffset.x;
+    let drawY = ny + inputOffset.y;
     addSegment('L' + this.colourIndex, LIGHT_COLOURS[this.colourIndex],
-               this.brightness * fade, this.size, nx - half, ny, nx + half, ny);
+               this.brightness * fade, this.size, drawX - half, drawY, drawX + half, drawY);
 
     this.x = nx; this.y = ny;
     this.age++;

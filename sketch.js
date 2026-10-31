@@ -59,6 +59,7 @@ function setup() {
   // rebuild the painting as living brush strokes (noise-randomness.js)
   initializeNoiseRandomness(painting);
   initializeAudio();
+  setupRiverInput();
 
   startedAt = millis();
   ready = true;
@@ -70,6 +71,7 @@ function setup() {
 function draw() {
   if (!ready) return;
   updateAudio();
+  updateRiverInput();
 
   const elapsed = Math.max(0, millis() - startedAt);
 
