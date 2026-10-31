@@ -107,11 +107,9 @@ const NEAR_BANK_LINE = [
 const DETAIL_AREAS = [
   { x1: 0.09, y1: 0.32, x2: 0.18, y2: 0.47 }    // church tower
 ];
-// The couple and the boats are too small and detailed to repaint with
-// dabs, so these parts of the original are shown through soft oval windows
-// (feathered edge, so it melts into the strokes around it).
+// Boat details are shown through soft oval windows from the original.
+// The former figures window is replaced with neighbouring grass below.
 const ORIGINAL_PATCHES = [
-  { cx: 0.774, cy: 0.892, rx: 0.068, ry: 0.125 },  // the couple
   { cx: 0.555, cy: 0.700, rx: 0.185, ry: 0.045 },  // boat hulls
   { cx: 0.505, cy: 0.600, rx: 0.016, ry: 0.085 },  // left mast
   { cx: 0.590, cy: 0.600, rx: 0.016, ry: 0.085 },  // middle mast
@@ -144,7 +142,7 @@ const STAR_POSITIONS = [
 let staticLayer;            // p5.Graphics: strokes that never move
 let staticStrokes = [];     // painted into staticLayer during the intro
 let fineLayer;              // transparent p5.Graphics drawn ON TOP of the motion
-let patchLayer;             // original-painting windows (couple, boats)
+let patchLayer;             // original-painting windows (boats)
 let fineStrokes = [];       // tiny detail strokes for fineLayer
 let movingStrokes = [];     // redrawn every frame
 let strokeBatches = [];     // movingStrokes grouped by colour + layer
@@ -227,6 +225,7 @@ function initializeNoiseRandomness(sourceImage, seed) {
         let py = constrain(y + random(-0.5, 0.5) * spacing, 0, height - 1);
         let u = px / width, v = py / height;
         let inDetailArea = isDetailArea(u, v);
+        let grassCover = grassCoverAmount(u, v);
 
         // detail strokes: only where the image has edges (not on open water,
         // where small strokes look like mosaic)
@@ -248,6 +247,12 @@ function initializeNoiseRandomness(sourceImage, seed) {
         // dark shapes, town edges) so no "patch" shows around them
         let source = colourSources[name];
         let colour = readPixel(source.img, px / source.blur, py / source.blur);
+        if (grassCover > 0) {
+          let nearby = readPixel(source.img, (px - width * 0.19) / source.blur, py / source.blur);
+          for (let channel = 0; channel < 3; channel++) {
+            colour[channel] = lerp(colour[channel], nearby[channel], grassCover);
+          }
+        }
         if (name === 'fine') {
           let inTown = v > SKY_BOTTOM - 0.02 && v < TOWN_BOTTOM + 0.01;
           let edge = fineField.edgeAt(u, v);
@@ -255,7 +260,9 @@ function initializeNoiseRandomness(sourceImage, seed) {
           let keep = (inDetailArea && (edge > 0.22 || dark)) || (inTown && field.edgeAt(u, v) > 0.1);
           if (!keep) continue;
         }
-        let angle = (name === 'fine') ? fineField.angleAt(u, v) : field.angleAt(u, v);
+        let angleU = u;
+        if (grassCover > 0.5) angleU = u - 0.19;
+        let angle = (name === 'fine') ? fineField.angleAt(angleU, v) : field.angleAt(angleU, v);
         let stroke = new BrushStroke(px, py, colour, angle, name, inDetailArea);
 
         if (name === 'fine') fineStrokes.push(stroke);
@@ -339,7 +346,7 @@ function displayNoiseRandomness() {
   // Random glints and ripple rings on the water
   if (revealed > 0.5) updateAndDrawWaterLife(ctx);
 
-  // The couple and boats, from the original painting (under the grass)
+  // Boat details from the original painting (under the grass)
   ctx.save();
   ctx.globalAlpha = constrain(map(progress, 0.6, 1, 0, 1), 0, 1);
   ctx.drawImage(patchLayer.elt, 0, 0, width, height);
@@ -348,7 +355,7 @@ function displayNoiseRandomness() {
   // Grass blades sway in front of the bank
   if (revealed > 0) drawGrassBlades(ctx, revealed);
 
-  // Fine details on top, so the motion never blurs boats and figures
+  // Fine details on top, so the motion never blurs the boats
   paintFineStrokes(constrain(map(progress, 0.5, 1, 0, 1), 0, 1));
   ctx.drawImage(fineLayer.elt, 0, 0, width, height);
 
@@ -755,12 +762,14 @@ function buildGrassBlades(colourSource) {
     if (v < nearBankY(u) + 0.01) continue;                 // only on the bank
     let x = u * width, y = v * height;
     let c = readPixel(colourSource.img, x / colourSource.blur, min(y, height - 1) / colourSource.blur);
-    // leave the couple visible: no blades rooted right in front of them
-    // (blades around grow over the window's soft edge)
-    let couple = ORIGINAL_PATCHES[0];
-    // (only around their upper bodies — the grass may cover their legs)
-    let du = (u - couple.cx) / (couple.rx * 0.6), dv = (v - (couple.cy - 0.02)) / (couple.ry * 0.55);
-    if (du * du + dv * dv < 1) continue;
+    let cover = grassCoverAmount(u, v);
+    if (cover > 0) {
+      let nearby = readPixel(colourSource.img, (x - width * 0.19) / colourSource.blur,
+        min(y, height - 1) / colourSource.blur);
+      for (let channel = 0; channel < 3; channel++) {
+        c[channel] = lerp(c[channel], nearby[channel], cover);
+      }
+    }
     grassBlades.push(new GrassBlade(x, y, c));
   }
   grassBlades.sort((a, b) => a.y - b.y);                   // far first
@@ -1478,6 +1487,15 @@ function buildCanvasGrain() {
 // ---------------------------------------------------------------------
 // HELPERS: regions and colour
 // ---------------------------------------------------------------------
+// ChatGPT/Codex: blend the former figures into neighbouring grass.
+// Coordinates are relative to the canvas so the cover scales with it.
+function grassCoverAmount(u, v) {
+  let dx = (u - 0.774) / 0.105;
+  let dy = (v - 0.892) / 0.14;
+  let distance = dx * dx + dy * dy;
+  return constrain((1.5 - distance) / 0.6, 0, 1);
+}
+
 function classifyRegion(u, v, colour) {
   if (v < SKY_BOTTOM) return 'sky';
   if (v < TOWN_BOTTOM) return 'town';
