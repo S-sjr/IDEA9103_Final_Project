@@ -17,6 +17,7 @@ let oilMoon;
 
 // 项目使用 p5 1.x，通过 preload() 等待图片加载完成。
 function preload() {
+  preloadCoupleInput();
   const poster = document.getElementById('painting-source');
 
   painting = loadImage(poster.src, undefined, () => {
@@ -152,4 +153,5 @@ function renderScene(t) {
   }
 
   drawLightsAndReflections(t);
+  drawCoupleInput();
 }

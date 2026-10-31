@@ -18,6 +18,7 @@ let riverInputLastY = 0;
 let riverInputWasInside = false;
 
 function setupRiverInput() {
+  setupCoupleInput();
   setupGrassInput();
   riverInputMarks = [];
   for (let i = 0; i < 24; i++) {
@@ -29,6 +30,7 @@ function setupRiverInput() {
 
 // Called once per frame BEFORE the scene draws its particles.
 function updateRiverInput() {
+  updateCoupleInput();
   updateGrassInput();
   // Existing disturbances fade even after the mouse leaves the canvas.
   for (let mark of riverInputMarks) {
@@ -152,4 +154,152 @@ function getGrassInputOffset(rootX, rootY, bladeHeight) {
     x: constrain(offsetX, -bladeHeight * 0.9, bladeHeight * 0.9),
     y: constrain(offsetY, -bladeHeight * 0.25, bladeHeight * 0.25)
   };
+}
+
+// Couple: time-based walking, smooth sway, and inactivity fade.
+let coupleImage;
+let coupleSprite;
+let coupleImageFailed = false;
+let coupleX = 0;
+let coupleY = 0;
+let coupleHeight = 0;
+let coupleWidth = 0;
+let coupleNearScale = 1.55; // Up to 15% larger near the bottom
+let coupleWalkSpeed = 22.5; // Canvas pixels per second
+let coupleSway = 0;
+let coupleWalkPhase = 0;
+let coupleSwayAmount = 0;
+let coupleOpacity = 0;
+let coupleLastArrowTime = -1;
+let couplePreviousTime = 0;
+let coupleIdleDelay = 10000;
+let coupleFadeDuration = 2000;
+
+function preloadCoupleInput() {
+  coupleImage = loadImage('assets/couple.png', undefined, function () {
+    coupleImageFailed = true;
+  });
+}
+
+function setupCoupleInput() {
+  coupleHeight = height * 0.16;
+  coupleWidth = coupleHeight * 2313 / 3065;
+  coupleX = width * 0.77;
+  coupleY = height * 0.95;
+  coupleSway = 0;
+  coupleWalkPhase = 0;
+  coupleSwayAmount = 0;
+  coupleOpacity = 0;
+  coupleLastArrowTime = -1;
+  couplePreviousTime = millis();
+  // Crop transparent padding and resize ONCE in memory, not every frame.
+  // This avoids tinting/scaling a 5407 x 4191 image during walking/fading.
+  // The original assets/couple.png file is never modified.
+  if (!coupleImageFailed && coupleImage && coupleImage.width) {
+    coupleSprite = coupleImage.get(1547, 563, 2313, 3065);
+    coupleSprite.resize(Math.ceil(coupleWidth * 2), 0);
+  }
+  constrainCoupleToGrass();
+}
+
+// Use absolute foot depth so sideways walking does not change the scale.
+function getCoupleDepthScale() {
+  let farY = height * 0.78;
+  let nearY = height - 8;
+  let depth = constrain((coupleY - farY) / (nearY - farY), 0, 1);
+  return 1 + depth * (coupleNearScale - 1);
+}
+
+function constrainCoupleToGrass() {
+  // Reserve the largest footprint, avoiding edge jumps as the figure grows.
+  let halfWidth = coupleWidth * coupleNearScale / 2 + 4;
+  coupleX = constrain(coupleX, halfWidth, width - halfWidth);
+  let bankY = nearBankY(coupleX / width) * height;
+  let leftBank = nearBankY((coupleX - halfWidth) / width) * height;
+  let rightBank = nearBankY((coupleX + halfWidth) / width) * height;
+  if (leftBank > bankY) bankY = leftBank;
+  if (rightBank > bankY) bankY = rightBank;
+  coupleY = constrain(coupleY, bankY + 12, height - 8);
+}
+
+function coupleKeyboardAvailable() {
+  let tag = document.activeElement.tagName;
+  return focused && tag !== 'INPUT' && tag !== 'TEXTAREA' &&
+    tag !== 'SELECT' && tag !== 'BUTTON' &&
+    !document.activeElement.isContentEditable;
+}
+
+function activateCoupleInput() {
+  coupleLastArrowTime = millis();
+  coupleOpacity = 255;
+}
+
+function updateCoupleInput() {
+  let now = millis();
+  // Clamp long stalls so returning to the tab cannot teleport the couple.
+  let seconds = constrain((now - couplePreviousTime) / 1000, 0, 0.1);
+  couplePreviousTime = now;
+  let moveX = 0;
+  let moveY = 0;
+  if (coupleKeyboardAvailable()) {
+    let left = keyIsDown(LEFT_ARROW);
+    let right = keyIsDown(RIGHT_ARROW);
+    let up = keyIsDown(UP_ARROW);
+    let down = keyIsDown(DOWN_ARROW);
+    if (left || right || up || down) activateCoupleInput();
+    if (left) moveX--;
+    if (right) moveX++;
+    if (up) moveY--;
+    if (down) moveY++;
+  }
+  if (moveX !== 0 && moveY !== 0) {
+    moveX *= 0.7071;
+    moveY *= 0.7071;
+  }
+  let oldX = coupleX;
+  let oldY = coupleY;
+  coupleX += moveX * coupleWalkSpeed * seconds;
+  coupleY += moveY * coupleWalkSpeed * seconds;
+  constrainCoupleToGrass();
+
+  let moving = dist(oldX, oldY, coupleX, coupleY) > 0.001;
+  // Smooth start/stop envelope; no sharp reversal at the sway endpoints.
+  if (moving) {
+    coupleSwayAmount = constrain(coupleSwayAmount + seconds * 3, 0, 1);
+  } else {
+    coupleSwayAmount = constrain(coupleSwayAmount - seconds * 4, 0, 1);
+  }
+  if (moving || coupleSwayAmount > 0) coupleWalkPhase += seconds * 5;
+  coupleSway = Math.sin(coupleWalkPhase) * 1.2 * coupleSwayAmount;
+
+  if (coupleLastArrowTime < 0) {
+    coupleOpacity = 0;
+  } else {
+    let fadeTime = now - coupleLastArrowTime - coupleIdleDelay;
+    coupleOpacity = 255 * (1 - constrain(fadeTime / coupleFadeDuration, 0, 1));
+  }
+}
+
+function drawCoupleInput() {
+  if (coupleImageFailed || !coupleSprite || coupleOpacity <= 0) return;
+  push();
+  imageMode(CORNER);
+  tint(255, coupleOpacity);
+  let depthScale = getCoupleDepthScale();
+  let drawWidth = coupleWidth * depthScale;
+  let drawHeight = coupleHeight * depthScale;
+  // Keep feet anchored: enlargement grows upward, not below the grass.
+  image(coupleSprite, coupleX - drawWidth / 2 + coupleSway,
+    coupleY - drawHeight, drawWidth, drawHeight);
+  pop();
+}
+
+function keyPressed() {
+  if (coupleKeyboardAvailable() &&
+      (keyCode === LEFT_ARROW || keyCode === RIGHT_ARROW ||
+       keyCode === UP_ARROW || keyCode === DOWN_ARROW)) {
+    // Capture even a brief tap occurring between rendered frames.
+    activateCoupleInput();
+    return false;
+  }
 }
