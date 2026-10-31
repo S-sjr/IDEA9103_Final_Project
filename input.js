@@ -18,6 +18,7 @@ let riverInputLastY = 0;
 let riverInputWasInside = false;
 
 function setupRiverInput() {
+  setupGrassInput();
   riverInputMarks = [];
   for (let i = 0; i < 24; i++) {
     riverInputMarks.push({ x: 0, y: 0, moveX: 0, moveY: 0 });
@@ -28,6 +29,7 @@ function setupRiverInput() {
 
 // Called once per frame BEFORE the scene draws its particles.
 function updateRiverInput() {
+  updateGrassInput();
   // Existing disturbances fade even after the mouse leaves the canvas.
   for (let mark of riverInputMarks) {
     mark.moveX *= riverInputReturn;
@@ -86,4 +88,68 @@ function getRiverInputOffset(x, y) {
   );
 
   return { x: displacedX - x, y: displacedY - y };
+}
+
+// Grass input: nearby tips follow mouse movement; roots stay fixed.
+// Uses the same classroom building blocks as the river interaction.
+let grassInputRadius = 90;
+let grassInputMarks = [];
+let grassInputNext = 0;
+let grassInputLastX = 0;
+let grassInputLastY = 0;
+let grassInputWasInside = false;
+
+function setupGrassInput() {
+  grassInputMarks = [];
+  for (let i = 0; i < 12; i++) {
+    grassInputMarks.push({ x: 0, y: 0, moveX: 0, moveY: 0 });
+  }
+  grassInputNext = 0;
+  grassInputWasInside = false;
+}
+
+function updateGrassInput() {
+  for (let mark of grassInputMarks) {
+    mark.moveX *= 0.86;
+    mark.moveY *= 0.86;
+  }
+
+  // Include the tips slightly above the riverbank boundary.
+  let inside = mouseX >= 0 && mouseX <= width &&
+    mouseY >= nearBankY(mouseX / width) * height - 45 &&
+    mouseY <= height;
+
+  if (inside && grassInputWasInside) {
+    let movement = dist(mouseX, mouseY, grassInputLastX, grassInputLastY);
+    if (movement > 0.5 && movement < 160) {
+      let mark = grassInputMarks[grassInputNext];
+      mark.x = (mouseX + grassInputLastX) / 2;
+      mark.y = (mouseY + grassInputLastY) / 2;
+      mark.moveX = constrain((mouseX - grassInputLastX) * 2, -35, 35);
+      mark.moveY = constrain((mouseY - grassInputLastY) * 0.7, -12, 12);
+      grassInputNext++;
+      if (grassInputNext >= grassInputMarks.length) grassInputNext = 0;
+    }
+  }
+  grassInputLastX = mouseX;
+  grassInputLastY = mouseY;
+  grassInputWasInside = inside;
+}
+
+function getGrassInputOffset(rootX, rootY, bladeHeight) {
+  let offsetX = 0;
+  let offsetY = 0;
+  for (let mark of grassInputMarks) {
+    // Test the middle of the blade instead of only its root.
+    let distance = dist(rootX, rootY - bladeHeight / 2, mark.x, mark.y);
+    if (distance < grassInputRadius) {
+      let influence = 1 - distance / grassInputRadius;
+      offsetX += mark.moveX * influence;
+      offsetY += mark.moveY * influence;
+    }
+  }
+  return {
+    x: constrain(offsetX, -bladeHeight * 0.9, bladeHeight * 0.9),
+    y: constrain(offsetY, -bladeHeight * 0.25, bladeHeight * 0.25)
+  };
 }

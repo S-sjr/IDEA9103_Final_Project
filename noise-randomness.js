@@ -733,6 +733,8 @@ class GrassBlade {
     let own = noiseTableAt(this.noiseOffset + flowTime * 260) - 0.5;
     let bend = (wave * 1.3 * windGust + own * 0.7) * this.flexibility * motionSettings.grassSway;
 
+    // Tao: mouse displacement is separate from the natural wind.
+    let inputOffset = getGrassInputOffset(this.x, this.y, this.height);
     let px = this.x, py = this.y;
     this.points[0] = px; this.points[1] = py;
     let step = this.height / GRASS_SEGMENTS;
@@ -747,7 +749,9 @@ class GrassBlade {
       let angle = -HALF_PI + this.lean * t + droop + bend * pow(t, 1.4) + curl * t;
       px += cos(angle) * step;
       py += sin(angle) * step;
-      this.points[k * 2] = px; this.points[k * 2 + 1] = py;
+      // Squared height fraction: fixed root, flexible tip.
+      this.points[k * 2] = px + inputOffset.x * t * t;
+      this.points[k * 2 + 1] = py + inputOffset.y * t * t;
     }
   }
 }
@@ -1002,8 +1006,14 @@ class FlowParticle {
       this.colourIndex = nearestColour(palette, c[0] + 6, c[1] + 6, c[2] + 8);
     }
     let fade = sin(constrain(this.age / this.life, 0, 1) * PI);   // soft start and end
+    // Tao: ordinary water strokes respond too, including the left river.
+    // Offset both ends so natural motion and colour sampling remain unchanged.
+    let inputStart = getRiverInputOffset(this.x, this.y);
+    let inputEnd = getRiverInputOffset(nx, ny);
     addSegment('w' + this.colourIndex, paletteStyles[this.colourIndex],
-               this.alpha * fade, this.size, this.x, this.y, nx, ny);
+               this.alpha * fade, this.size,
+               this.x + inputStart.x, this.y + inputStart.y,
+               nx + inputEnd.x, ny + inputEnd.y);
 
     this.x = nx; this.y = ny;
     this.age++;
