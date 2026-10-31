@@ -75,13 +75,26 @@ function draw() {
 
   const elapsed = Math.max(0, millis() - startedAt);
 
-  // 修改：通过新函数计算当前处于哪一个阶段
-  progress = cycleProgress(elapsed);
+  // 每轮 200 秒，结束后直接从太阳开场重新开始
+  const cycleElapsed = elapsed % CYCLE_DURATION;
 
-  // 修改：让闪烁、水波和云层使用连续运行的时钟
-  effectSeconds = elapsed / 1000;
+  progress = sceneProgress(cycleElapsed);
+
+  // 夜景停留期间，星光和倒影继续闪动
+  effectSeconds = cycleElapsed / 1000;
 
   renderScene(progress);
+}
+
+function sceneProgress(elapsed) {
+  // 0–5 秒：保持日落
+  // 5–20 秒：太阳落下、月亮升起
+  // 20–200 秒：保持完整夜景
+  return constrain(
+    (Math.max(0, elapsed) - SUNSET_HOLD_DURATION) / DURATION,
+    0,
+    1
+  );
 }
 
 function cycleProgress(elapsed) {
