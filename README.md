@@ -154,3 +154,12 @@ Music: user-supplied file `Glimpse of Us.m4a`. Confirm the recording's artist, s
 AI acknowledgement: OpenAI Codex assisted with the audio module, background playback, integration and documentation in this repository. Jiarong should review and understand the implementation and tune its artistic response before presenting it.
 
 Reference: [p5.sound FFT](https://p5js.org/reference/p5.sound/p5.FFT/), used through the locally bundled library.
+
+
+## Grass coverage iteration - 31 October 2026
+
+Tianyi requested that the two figures on the near bank be covered by the existing moving grass. The figures' original-image window and the no-grass exclusion around their upper bodies have been removed. Grass now grows continuously through that area. A soft, normalised oval region mixes the underlying stroke and blade colours with colours from the adjacent bank, so the figures do not reappear as dark silhouettes when the grass bends. Stroke directions inside the region also use the adjacent bank.
+
+ChatGPT/Codex assisted with this targeted change to `noise-randomness.js`. The new region calculation uses arithmetic, variables and functions (Weeks 2-3), conditions and a basic `for` loop (Week 4), `constrain` (Week 6) and numeric `lerp` (Week 11). It reuses the project's existing colour-sampling and drawing pipeline; this note is not a claim that all pre-existing implementation techniques are within the verified course scope.
+
+Validation: JavaScript syntax and whitespace checks passed. A self-contained copy was opened in VS Code's integrated browser; the near-bank grass covered the former figures while the grass animation and boat details remained visible. The original image asset was not edited.
