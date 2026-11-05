@@ -167,12 +167,15 @@ let coupleWidth = 0;
 let coupleNearScale = 1.55; // Up to 15% larger near the bottom
 let coupleWalkSpeed = 22.5; // Canvas pixels per second
 let coupleSway = 0;
+let coupleSwayDegrees = 1; // Maximum rotation to either side while walking.
+let couplePivotY = 0.6; // Pivot 60% down the sprite, slightly below its centre.
 let coupleWalkPhase = 0;
 let coupleSwayAmount = 0;
 let coupleOpacity = 0;
 let coupleLastArrowTime = -1;
 let couplePreviousTime = 0;
-let coupleIdleDelay = 10000;
+let coupleIdleDelay = 3000; // Begin fading out 3 seconds after the last arrow input.
+let coupleFadeInDuration = 1500; // Milliseconds to fade in from fully transparent.
 let coupleFadeDuration = 2000;
 
 function preloadCoupleInput() {
@@ -231,7 +234,7 @@ function coupleKeyboardAvailable() {
 
 function activateCoupleInput() {
   coupleLastArrowTime = millis();
-  coupleOpacity = 255;
+  // Keep the current opacity: repeated keys and interrupted fade-outs stay smooth.
 }
 
 function updateCoupleInput() {
@@ -270,13 +273,17 @@ function updateCoupleInput() {
     coupleSwayAmount = constrain(coupleSwayAmount - seconds * 4, 0, 1);
   }
   if (moving || coupleSwayAmount > 0) coupleWalkPhase += seconds * 5;
-  coupleSway = Math.sin(coupleWalkPhase) * 1.2 * coupleSwayAmount;
+  coupleSway = Math.sin(coupleWalkPhase) * (coupleSwayDegrees * Math.PI / 180) * coupleSwayAmount;
 
   if (coupleLastArrowTime < 0) {
     coupleOpacity = 0;
   } else {
     let fadeTime = now - coupleLastArrowTime - coupleIdleDelay;
-    coupleOpacity = 255 * (1 - constrain(fadeTime / coupleFadeDuration, 0, 1));
+    if (fadeTime <= 0) {
+      coupleOpacity = Math.min(255, coupleOpacity + 255 * seconds * 1000 / coupleFadeInDuration);
+    } else {
+      coupleOpacity = 255 * (1 - constrain(fadeTime / coupleFadeDuration, 0, 1));
+    }
   }
 }
 
@@ -288,9 +295,12 @@ function drawCoupleInput() {
   let depthScale = getCoupleDepthScale();
   let drawWidth = coupleWidth * depthScale;
   let drawHeight = coupleHeight * depthScale;
-  // Keep feet anchored: enlargement grows upward, not below the grass.
-  image(coupleSprite, coupleX - drawWidth / 2 + coupleSway,
-    coupleY - drawHeight, drawWidth, drawHeight);
+  // Rotate around a point slightly below the sprite's centre.
+  // At rest, the original foot position and depth scaling are preserved.
+  translate(coupleX, coupleY - drawHeight * (1 - couplePivotY));
+  drawingContext.rotate(coupleSway); // Canvas rotation always uses radians.
+  image(coupleSprite, -drawWidth / 2, -drawHeight * couplePivotY,
+    drawWidth, drawHeight);
   pop();
 }
 
