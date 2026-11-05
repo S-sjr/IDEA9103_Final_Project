@@ -1,4 +1,9 @@
 // Audio mechanic — Jiarong Sun
+// AI assistance: OpenAI Codex helped draft and refine playback, FFT analysis,
+// grouped star responses, smoothing, low-volume compensation and volume controls.
+// Bass scales water motion; three bands add independent star brightness pulses.
+// Music: Glimpse of Us, instrumental piano version. Team-supplied source: https://www.bilibili.com/video/BV19a411W7GA/
+// Its slow, weighty notes support the intended sense of solitude.
 // FFT splits the song into frequency bins; getEnergy averages a selected band.
 // Reference: https://p5js.org/reference/p5.sound/p5.FFT/
 const AUDIO_SETTINGS = {
@@ -9,7 +14,7 @@ const AUDIO_SETTINGS = {
   starReferenceVolume: 0.3,
   starMaxCompensation: 3, // Limit amplification at very low listening volumes.
   starMinDecibels: -120, // Retain quiet details that the default -100 dB floor discards.
-  waterBoost: 3.6, // Extra water motion at full bass energy (previously 1.8).
+  waterBoost: 3.6, // Extra water motion at full bass energy.
   starPulseStrength: 1.8, // Direct brightness response to each group's musical band.
   starGroups: [
     // This recording has much stronger midrange than upper treble.

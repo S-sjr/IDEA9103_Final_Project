@@ -1,3 +1,5 @@
+// OpenAI Codex assisted audio/input integration and the accessibility description.
+// Artwork image source: https://www.nbfox.com/starry-night-over-the-rhone/
 let painting;
 let paintingLoadFailed = false;
 let ready = false;
@@ -47,7 +49,7 @@ function setup() {
   frameRate(30);
 
   describe(
-    'A riverside oil painting on a fifteen-second loop: the sun sets, sunset colours fade, ' +
+    'A riverside oil painting on a 230-second lighting cycle: the sun sets, sunset colours fade, ' +
     'clouds disperse, the moon rises, and stars and reflected lights gradually brighten.'
   );
 

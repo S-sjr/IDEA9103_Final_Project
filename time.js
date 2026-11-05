@@ -101,7 +101,8 @@ function drawGradient(t, strength = 1) {
 
 // ==================== Oil-paint brushstroke utilities ====================
 
-// Use a fixed random seed so textures do not change from frame to frame.
+// Seeded Mulberry32-style generator for repeatable textures built once in setup.
+// Algorithm reference: https://github.com/bryc/code/blob/master/jshash/PRNGs.md
 function oilRandom(seed) {
   let state = seed >>> 0;
 
@@ -878,6 +879,8 @@ function glow(x, y, radius, rgb, opacity) {
   ctx.restore();
 }
 
+// OpenAI Codex assisted the slow natural glow and grouped musical brightness.
+// The star index matches the same group used by TwinkleStar in noise-randomness.js.
 function drawStarGlow(t) {
   const amount =
     nightEffectVisibility(t) * EFFECT_STRENGTH;

@@ -4,18 +4,18 @@
 // "Starry Night Over the Rhône" — repainted stroke by stroke, and alive
 //
 // IDEA
-//   The original image is never shown. It is only used as a hidden
-//   "underdrawing": tens of thousands of short brush strokes read their
-//   colour and direction from it and are painted onto an empty canvas,
-//   each with bristle marks, like an oil painting being made by hand.
+//   The source image guides procedural colour and brush direction. Selected
+//   boat and mast details are also displayed through feathered image patches.
+//   Four layers of short brush strokes rebuild the surrounding painting.
+//   Source image: https://www.nbfox.com/starry-night-over-the-rhone/
 //   Then the painting keeps moving:
 //     · Sky     – long strokes flow along a shared Perlin-noise field; each
 //                 takes a random blue (deep → light) and patches of colour
 //                 drift with noise; thin clouds form, drift and dissolve at
 //                 random
 //     · Stars   – each star twinkles with its OWN random strength and speed;
-//                 the strength itself drifts, so some moments a star only
-//                 glimmers and other moments it flares with light rays
+//                 slow natural variation continues beneath three independent
+//                 musical brightness groups; strong pulses can reveal rays
 //     · Water   – calm and rough moments alternate (noise + random surges);
 //                 flow particles keep repainting the river along a noise
 //                 current (after Petros Vrellis' Starry Night animation);
@@ -27,8 +27,9 @@
 //                 its own noise, gusts come at random moments with random
 //                 strength, and every blade has random flexibility
 //
-// RANDOMNESS (chosen once, when the painting is built)
-//   randomSeed() + noiseSeed() → one seed number reproduces the whole work
+// RANDOMNESS (initial identities are seeded; runtime events also use random())
+//   randomSeed() + noiseSeed() reproduce the initial procedural arrangement;
+//   later motion also depends on frame timing, user input and audio playback.
 //   random() → stroke positions, length, slight colour variation,
 //              painting order, personal noise offsets and speeds,
 //              each star's twinkle strength and speed
@@ -39,10 +40,10 @@
 //    a random extra push that slowly dies down)
 //
 // FOUR LAYERS OF STROKES (like a painter working from big to small)
-//   1. underpainting – big soft strokes, cover the canvas, never move
+//   1. underpainting - cached broad strokes; river rows are displaced at render time
 //   2. main          – medium strokes, carry the picture, move by region
 //   3. detail        – smaller dabs only where the image has edges
-//   4. fine          – small dabs on top for boats, figures, town lights
+//   4. fine          - small edge dabs around the church and town
 //
 // HOW sketch.js USES THIS FILE
 //   setup():  initializeNoiseRandomness(paintingImage);  (after createCanvas)
@@ -50,8 +51,9 @@
 //
 // HOOKS FOR THE OTHER MECHANICS (bottom of file)
 //   Time  (Chenlei): setStarVisibility(0..1)
-//   Audio (Jiarong): setWaterRippleScale(n), setStarTwinkleBoost(n)
-//   Input (Tao):     disturbWater(x, y)   (starts a ripple ring)
+//   Audio (Jiarong): setWaterRippleScale(n), setStarMusicPulses([a, b, c])
+//   Input (Tao): getRiverInputOffset() and getGrassInputOffset() from input.js
+//   Legacy hooks setStarTwinkleBoost() and disturbWater() are not called by the UI.
 //
 // TECHNIQUES FROM OUTSIDE THE COURSE (explained where they are used)
 //   · drawingContext — the browser's Canvas 2D API, used directly because
@@ -65,9 +67,11 @@
 //     https://en.wikipedia.org/wiki/K-means_clustering
 //
 // AI ACKNOWLEDGEMENT: written with the help of Claude (Anthropic, Opus 5.5).
-// Claude proposed the stroke-by-stroke repainting approach, the three
-// layers, the region rules and the performance techniques, and wrote the
+// Claude proposed the stroke-by-stroke repainting approach, the layer system,
+// the region rules and the performance techniques, and wrote the
 // code and comments. Tianyi Bo directed the look, tested and tuned it.
+// OpenAI Codex assisted later input offsets, foreground grass coverage,
+// slow natural star twinkle, grouped musical brightness and comment corrections.
 // =====================================================================
 
 
@@ -103,7 +107,7 @@ const NEAR_BANK_LINE = [
   [0.00, 0.86], [0.20, 0.84], [0.40, 0.80], [0.50, 0.775],
   [0.60, 0.765], [0.80, 0.765], [1.00, 0.775]
 ];
-// Areas whose outlines (masts, hulls, figures) get extra-small strokes
+// The church region receives extra-small edge strokes; town edges are handled below.
 const DETAIL_AREAS = [
   { x1: 0.09, y1: 0.32, x2: 0.18, y2: 0.47 }    // church tower
 ];
@@ -173,7 +177,7 @@ let waterSurge = 0;         // random surge of waves, fades away
 let windSurge = 0;          // random gust of wind, fades away
 
 // 1D Perlin curve sampled once; personal motion reads it with an offset
-// (same values as calling noise() each time, far cheaper for 30k strokes)
+// Interpolated, wrapping samples approximate a continuous noise curve cheaply.
 const NOISE_TABLE_SIZE = 4096;
 let noiseTable;
 
@@ -189,8 +193,8 @@ let externalInfluence = {
 // ENTRY FUNCTIONS
 // ---------------------------------------------------------------------
 
-// Builds the whole painting from the source image (called in setup and
-// again after a window resize). seed is optional.
+// Builds the painting in setup; an optional seed can reproduce its initial layout.
+// CSS scales the existing canvas on resize; no resize callback rebuilds this scene.
 function initializeNoiseRandomness(sourceImage, seed) {
   currentSeed = (seed === undefined) ? floor(random(100000)) : seed;
   randomSeed(currentSeed);
@@ -213,7 +217,7 @@ function initializeNoiseRandomness(sourceImage, seed) {
   let field = buildDirectionField(sourceImage, 256, 3);
   let fineField = buildDirectionField(sourceImage, 640, 2);   // sharper, for tiny strokes
 
-  // Generate the three layers of strokes
+  // Generate four brush layers, stored as static, moving or fine strokes.
   staticStrokes = [];
   movingStrokes = [];
   fineStrokes = [];
@@ -244,8 +248,7 @@ function initializeNoiseRandomness(sourceImage, seed) {
         let preview = readPixel(colourSources.main.img, px / colourSources.main.blur, py / colourSources.main.blur);
         let goldenHere = preview[0] > 150 && preview[1] > 130 && preview[2] < 120;
         if (name === 'main' && onWater && !goldenHere && random() < 0.45) continue;
-        // fine strokes: only on real outlines (masts, hulls, the couple's
-        // dark shapes, town edges) so no "patch" shows around them
+        // Fine strokes are retained only on church details and town edges.
         let source = colourSources[name];
         let colour = readPixel(source.img, px / source.blur, py / source.blur);
         if (grassCover > 0) {
@@ -356,7 +359,7 @@ function displayNoiseRandomness() {
   // Grass blades sway in front of the bank
   if (revealed > 0) drawGrassBlades(ctx, revealed);
 
-  // Fine details on top, so the motion never blurs the boats
+  // Fine church and town details are drawn above the moving layers.
   paintFineStrokes(constrain(map(progress, 0.5, 1, 0, 1), 0, 1));
   ctx.drawImage(fineLayer.elt, 0, 0, width, height);
 
@@ -377,13 +380,13 @@ function displayNoiseRandomness() {
 }
 
 // Safety for slower computers: if the frame rate stays low after the
-// intro, half of the moving sky strokes are painted into the still layer
+// intro, approximately half of the moving sky strokes are painted into the still layer
 // (they stop moving) so each frame has less to draw. Repeats if needed.
 let slowFrames = 0;
 function checkPerformance(progress) {
   if (progress < 1) return;
   slowFrames = (frameRate() < 22) ? slowFrames + 1 : 0;
-  if (slowFrames < 60) return;          // about 2-3 seconds of slow frames
+  if (slowFrames < 60) return;          // 60 consecutive frames below 22 FPS (duration depends on FPS)
   slowFrames = 0;
   if (skyStrokes.length < 1500) return;  // keep enough motion
   let ctx = staticLayer.drawingContext;
@@ -484,12 +487,12 @@ class BrushStroke {
     } else {
       this.angle = imageAngle;
     }
-    if (layerName === 'fine') this.angle = imageAngle;   // follow outlines exactly
+    if (layerName === 'fine') this.angle = imageAngle;   // use image direction before the small random angle variation
     this.angle += random(-0.07, 0.07);     // small, so neighbours stay aligned
 
     // Every stroke shifts its colour slightly at random, so the paint
     // looks hand-mixed without becoming noisy
-    // (one shared shift for all three channels keeps the hue clean)
+    // A shared shift plus small per-channel jitter limits hue changes.
     let spread = (layerName === 'fine') ? 3 : 5;
     let shift = random(-spread, spread);
     let c = colour.map(v => v + shift + random(-2, 2));
@@ -633,7 +636,7 @@ class TwinkleStar {
 
     // Personal twinkle from Perlin noise, scaled by this star's random strength
     let n = noiseTableAt(this.noiseOffset + flowTime * 140 * this.twinkleSpeed);
-    // the star's strength also wanders slowly: calm → bursting → calm
+    // The natural twinkle strength also changes slowly over time.
     let mood = noiseTableAt(this.moodOffset + flowTime);
     let strength = this.twinkleStrength * (0.2 + 1.6 * mood) *
                    motionSettings.starTwinkle * externalInfluence.starTwinkleBoost;
@@ -1373,6 +1376,7 @@ function line2d(ctx, x1, y1, x2, y2) {
 // Direction + edge strength of the painting's texture (structure tensor):
 // measure brightness change (Sobel), smooth it, take the main direction
 // and turn it 90° so strokes run ALONG the forms.
+// Background: https://en.wikipedia.org/wiki/Structure_tensor
 function buildDirectionField(sourceImage, fieldWidth, radius) {
   let small = sourceImage.get();
   let fieldHeight = round(fieldWidth * sourceImage.height / sourceImage.width);
@@ -1419,7 +1423,8 @@ function buildDirectionField(sourceImage, fieldWidth, radius) {
   };
 }
 
-// k-means: find PALETTE_SIZE colours that best represent all strokes
+// k-means: find representative colours for the static and moving stroke palette.
+// Background: https://en.wikipedia.org/wiki/K-means_clustering
 function buildPalette(colours, size) {
   let centres = [];
   for (let i = 0; i < size; i++) centres.push([...random(colours)]);
@@ -1564,12 +1569,12 @@ function setStarVisibility(level) {
   externalInfluence.starVisibility = constrain(level, 0, 1);
 }
 
-// Audio (Jiarong): bass → bigger water ripples, e.g. map(bass, 0, 255, 1, 3)
+// Audio: scale water-row displacement and horizontal FlowParticle motion (1 to 4.6).
 function setWaterRippleScale(scale) {
   externalInfluence.waterRippleScale = max(0, scale);
 }
 
-// Audio (Jiarong): treble → stronger twinkle, e.g. map(treble, 0, 255, 1, 3)
+// Legacy natural-twinkle multiplier; the current audio module does not call it.
 function setStarTwinkleBoost(boost) {
   externalInfluence.starTwinkleBoost = max(0, boost);
 }
@@ -1586,8 +1591,7 @@ function getStarMusicPulse(starIndex) {
   return pulses[starIndex % pulses.length] || 0;
 }
 
-// Input (Tao): start a strong ripple ring on the water, e.g. on mouse
-// click: if (mouseY > height * 0.5) disturbWater(mouseX, mouseY);
+// Optional ripple-ring helper; no current mouse or keyboard event calls it.
 function disturbWater(x, y) {
   if (waterRipples.length < 40) waterRipples.push(new WaterRipple(x, y, true));
 }

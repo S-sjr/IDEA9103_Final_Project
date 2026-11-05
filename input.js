@@ -178,6 +178,9 @@ let coupleIdleDelay = 3000; // Begin fading out 3 seconds after the last arrow i
 let coupleFadeInDuration = 1500; // Milliseconds to fade in from fully transparent.
 let coupleFadeDuration = 2000;
 
+// Asset: the team cut out the couple from the source painting in Adobe Photoshop.
+// Source image: https://www.nbfox.com/starry-night-over-the-rhone/
+// The transparent PNG is loaded here; setup crops/resizes it only in memory.
 function preloadCoupleInput() {
   coupleImage = loadImage('assets/couple.png', undefined, function () {
     coupleImageFailed = true;
