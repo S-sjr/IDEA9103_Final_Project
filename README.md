@@ -1,170 +1,131 @@
 # Starry Night Over the Rhône — Living Pigments
 
-IDEA9103 Creative Coding Major Project — Group C
-University of Sydney, Semester 2 2026
-
-A group reinterpretation of Vincent van Gogh's *Starry Night Over the Rhône* (1888), rebuilt in p5.js. The painting is never displayed as a still image: it is **repainted stroke by stroke** by code, and then it keeps moving. Every member of the group is creative director for one mechanic, and each mechanic lives in its own script file.
-
+IDEA9103 Creative Coding Major Project — Group C  
+University of Sydney, Semester 2 2026  
 Due: Friday 6 November 2026, 4:00 pm.
 
-## Run it
+Our p5.js reinterpretation of Vincent van Gogh's *Starry Night Over the Rhône* (1888) combines painted strokes, changing light, music and visitor interaction. The broken reflections and directional brushwork inform the visual design. Temporary mouse disturbances and the couple's brief appearance suggest a visitor passing through a landscape whose movement continues independently. This is our interpretation, rather than a claim about the artist's documented intentions.
 
-Open `index.html` in a browser, or serve the folder locally (recommended, because `preload()` loads an image):
+## Running the project
 
+Serve this directory over HTTP using VS Code Live Server, or run:
+
+```sh
+python3 -m http.server 8000
 ```
-python -m http.server 8000
-# then visit http://localhost:8000
-```
 
-Requires no build step and no npm install. p5.js is bundled in `libraries/`.
+Visit `http://localhost:8000`. No build step or npm installation is needed: p5.js and p5.sound are bundled in `libraries/`. Keep the asset paths and script order in [index.html](index.html) intact. Audio playback requires browser support for the supplied M4A file; a click or key press may be needed to unlock playback.
 
-> **Current state:** the sketch runs on a 15-second automatic loop. Background audio is connected; user-input controls are still being wired in — see *Known gaps* below.
+## Controls and current behaviour
 
-## File structure
+| Action | Visible or audible effect |
+|---|---|
+| Move the mouse across the river | Nearby water strokes and golden reflections shift with the movement, then gradually recover. The input region spans the canvas width between the town and the sloping near bank. |
+| Move the mouse across the foreground grass | Nearby blade tips bend in the movement direction while roots remain fixed. The current influence radius is 90 canvas pixels. |
+| Press or hold the arrow keys | The couple fades in and walks slowly within the grass, with a gentle walking sway. Moving towards the bottom increases its scale. |
+| Release all arrow keys | The couple stops; after 3 seconds without arrow input, it fades out over 2 seconds. Its initial fade-in takes 1.5 seconds. These are the current code values. |
+| Click the speaker button | Open the volume slider. Zero mutes the music; click outside or press Escape to close the panel. |
 
-| File | Mechanic | Owner |
+Keyboard walking is disabled while a form control or editable element has focus. Mouse interaction is movement-driven; there is no active space-bar image toggle or click-to-create-ripple control.
+
+The painting reveals its strokes over approximately 3 seconds. Separately, the lighting cycle lasts **230 seconds**: 5 seconds of sunset, a 15-second sunset-to-night transition, then 210 seconds of night before a direct reset. Natural motion and musical responses continue during the night hold. CSS fits the canvas to the available display space; it does not rebuild the scene on every window resize.
+
+## Four members: functions, effects and source evidence
+
+The ownership labels below record the group's mechanic assignments. Function and class links show where the described behaviour is implemented; they do not establish sole authorship of shared or AI-assisted code.
+
+### Tianyi Bo (`RussellB-OvO`) — noise and randomness
+
+Primary module: [noise-randomness.js](noise-randomness.js).
+
+| Functionality | Effect in the artwork | Traceable implementation |
 |---|---|---|
-| `sketch.js` | main p5 sketch; brings everything together | group |
-| `noise-randomness.js` | Perlin noise + randomness | Tianyi Bo |
-| `time.js` | time-based transitions (sunset → night) | Chenlei Shi |
-| `input.js` | user input | Tao Yan |
-| `audio.js` | audio reactivity | Jiarong Sun |
-| `scene_data.js` | shared measurements (canvas size, star positions, palettes) | Chenlei Shi |
+| Build a seeded, layered painting from the source image | Broad marks establish the composition, followed by finer directional brushwork | [initializeNoiseRandomness](noise-randomness.js#L194), [BrushStroke](noise-randomness.js#L446), [displayNoiseRandomness](noise-randomness.js#L322) |
+| Combine shared noise fields with random surges | Sky, water and grass move continuously, with variations rather than identical repeated motions | [updateNoiseFields](noise-randomness.js#L1246), [updateSurges](noise-randomness.js#L1274) |
+| Animate river particles and light columns | Flowing strokes and shimmering reflections retain the painting's broken-water texture | [FlowParticle](noise-randomness.js#L983), [LightParticle](noise-randomness.js#L1031), [updateWaterTrail](noise-randomness.js#L931) |
+| Give scene elements individual motion | Stars twinkle, cloud wisps drift, grass bends, and water glints and ripple rings appear | [TwinkleStar](noise-randomness.js#L591), [CloudWisp](noise-randomness.js#L1160), [GrassBlade](noise-randomness.js#L711), [updateAndDrawWaterLife](noise-randomness.js#L1133) |
+| Batch strokes and limit rendering cost | Support a dense painted surface while reducing repeated drawing work | [buildStrokeBatches](noise-randomness.js#L1304), [checkPerformance](noise-randomness.js#L383) |
 
-## Inspiration
+The source image supplies colour and direction. Selected boat and mast details are retained through [buildOriginalPatches](noise-randomness.js#L1454); the source image also serves as a loading-failure fallback in the shared sketch. The work therefore combines procedural marks with selected image details, rather than eliminating bitmap rendering entirely.
 
-**Primary artwork.** Vincent van Gogh, *Starry Night Over the Rhône* (1888). We were drawn to three things specifically: the broken golden reflections of the gas lamps on the water, the deep ultramarine sky punched through by warm stars, and the way van Gogh built the whole surface out of separate directional marks rather than smooth blending. Those three observations set our technical agenda — the painting had to be made *out of strokes*, not shown as a picture with filters on top.
+### Chenlei Shi (`shi1907194503-dot`) — time
 
-**Motion reference.** Petros Vrellis' *Starry Night* flowing-brush animation ([artof01.com](https://artof01.com/vrellis/works/starry_night.html)) suggested that van Gogh's brushwork can be treated as a direction field that other things flow along. We use this only as a conceptual reference; none of his code is used.
+Primary modules: [time.js](time.js) and [scene_data.js](scene_data.js), integrated through the shared [sketch.js](sketch.js).
 
-**Visual reference.** A painterly coastal animation shared on [xiaohongshu](https://xhslink.cn/o/9D56KGBAxiA) informed how we layered water marks and directional grass. Used as a look reference only, not as a code source.
-
-The interpretation is deliberately not a copy. Composition, palette and brushwork are measured and regenerated by code, so each run produces a recognisable but different painting.
-
-## Techniques
-
-**Repainting rather than displaying.** At start-up the canvas is empty. Tens of thousands of short strokes are laid down over ~3 seconds, each picking its colour from the source image and its direction from the image's own local texture. Four layers are drawn from large to small: `underpainting` (static), `main` (moves by region), `detail` (only near edges), `fine` (tiny dabs for boats and town lights). A few areas — the couple in the foreground, the boat hulls, the masts — are too fine to rebuild from dabs, so the original shows through soft feathered windows that melt into the surrounding paint.
-
-**Structure tensor for direction.** To make strokes follow van Gogh's brushwork instead of lying flat, we compute an image-gradient structure tensor over a downsampled version of the source and take its dominant orientation per cell. This is outside course content, so it is explained in a comment at `buildDirectionField()`.
-
-**k-means colour clustering.** Every stroke is snapped to one of 64 palette colours so that strokes can be batched by colour and drawn with far fewer state changes. This is the main reason the piece holds its frame rate. Explained at `buildPalette()`.
-
-**Drawing through `drawingContext`.** The moving strokes go straight to the browser's Canvas 2D API rather than through p5's `line()`, because p5's per-call overhead is too high at this volume. Explained where it is used.
-
-**Perlin noise + randomness (Tianyi Bo's mechanic).** Reproducibility is the backbone:
-
-- `randomSeed()` and `noiseSeed()` are set once from a single seed, so one number reproduces the entire painting.
-- **`random()`** decides stroke positions, lengths, slight colour variation, painting order, per-star twinkle strength and speed, per-cloud birth times, per-blade flexibility, and when each ripple appears.
-- **`noise()`** is read every frame with a small time step, so motion is smooth and neighbouring elements move together: `noise(x, y, t)` drives shared fields for sky flow, water depth and wind across the grass; `noise(offset + t)` gives each element its personal flutter, shimmer or twinkle.
-- **Random surges** are layered on top: at random moments the water or the wind receives a random extra push that decays over time, so the scene never settles into an obvious loop.
-
-Region-specific behaviour:
-
-- **Sky** — long strokes flow along the shared noise field, each taking a random blue from deep to light, with patches of colour drifting; thin clouds form, drift and dissolve at random.
-- **Stars** — each star twinkles with its *own* random strength and speed, and that strength itself drifts slowly on noise, so a star sometimes only glimmers and sometimes flares with soft rays (`TwinkleStar`).
-- **Water** — calm and rough moments alternate from noise plus random surges; particles keep repainting the river along a noise current; sparkles and ripple rings appear at random places, sizes and times. Emission is bounded by elapsed seconds and a strict population cap, so particle count can never grow without limit.
-- **Grass** — long soft blades on the near bank; big noise waves roll through the whole patch, each blade sways and curls with its own noise, gusts arrive at random with random strength, and each blade has random flexibility. Roots stay fixed — only the tips move.
-
-Each element is one of: a `Stroke`, `TwinkleStar`, `CloudWisp`, `GrassBlade`, `WaterParticle` or `WaterLife` object. Values chosen at random are stored on construction and reused; nothing re-rolls its identity per frame.
-
-**Integration between mechanics.** Each mechanic exposes scalar hooks rather than duplicating other people's work:
-
-```js
-// Time  (Chenlei):  setStarVisibility(0..1)
-// Audio (Jiarong):  setWaterRippleScale(n), setStarTwinkleBoost(n)
-// Input (Tao):      disturbWater(x, y)      // starts a ripple ring
-```
-
-`setStarVisibility()` is already used in `sketch.js`, feeding `nightEffectVisibility(t)` from the time mechanic into star brightness.
-
-## Mechanic ownership
-
-| Member | Mechanic | What it does |
+| Functionality | Effect in the artwork | Traceable implementation |
 |---|---|---|
-| **Tianyi Bo** (`RussellB-OvO`) | Perlin noise + randomness | Repaints the artwork from seeded strokes, then animates sky, stars, water, clouds and grass with shared noise fields plus per-element randomness and random surges. Owns `noise-randomness.js`. |
-| **Chenlei Shi** (`shi1907194503-dot`) | Time-based | Drives the sunset → night transition: gradient, sun and moon position, cloud dispersal. Owns `time.js` and `scene_data.js` (including the measured star positions). |
-| **Tao Yan** (`Tao105619`) | User input | Mouse / keyboard interaction (currently a distance-driven image-segment grid — space bar toggles it). Owns `input.js`. |
-| **Jiarong Sun** (`ROoooonG`) | Audio | Audio level / frequency reactivity. Owns `audio.js`. Also set up the repository structure. |
+| Define timing, palettes and measured positions | Keep the lighting progression and celestial elements aligned with the composition | [timing constants](scene_data.js#L7), [sceneProgress](sketch.js#L90) |
+| Interpolate colour and fade the gradient | Warm sunset colour gradually gives way to the underlying night painting | [paletteAt](time.js#L15), [gradientVisibility](time.js#L50), [drawGradient](time.js#L76) |
+| Build and move painted sun and moon textures | The sun sets behind the clouds and the moon rises towards the upper left | [buildOilOrb](time.js#L275), [drawSun](time.js#L425), [drawMoon](time.js#L467) |
+| Change cloud coverage and night visibility | Clouds disperse while stars and reflected lights become more prominent | [drawClouds](time.js#L751), [nightEffectVisibility](time.js#L66), [drawStarGlow](time.js#L881), [drawLightsAndReflections](time.js#L915) |
 
-## AI acknowledgement
+The active loop calls `sceneProgress()`. The older `cycleProgress()` helper remains in the file but is not called by `draw()`; its return-to-sunset branch does not describe the current playback cycle.
 
-Generative AI was used for parts of this project, as required by the brief.
+### Tao Yan (`Tao105619`) — user input
 
-**Claude (Anthropic, Opus 5.5)** assisted Tianyi Bo with the Perlin noise + randomness mechanic. Claude proposed the stroke-by-stroke repainting approach, the four-layer structure, the region-based motion rules, and the two performance techniques listed above (structure tensor, k-means batching). It wrote or drafted portions of `noise-randomness.js` and its comments. Tianyi Bo directed the visual outcome, chose and tuned the parameters, tested the result, and reviewed and edited the generated code. This acknowledgement is repeated in the source at the top of `noise-randomness.js`.
+Primary module: [input.js](input.js), with drawing hooks inside `noise-randomness.js` and lifecycle calls in `sketch.js`.
 
-**ChatGPT / Codex** was used in an earlier standalone study (`Desktop/9103 final/rhone-pigments`, local only, not part of this repository) for architecture discussion, code generation, documentation and debugging there.
+| Functionality | Effect in the artwork | Traceable implementation |
+|---|---|---|
+| Store and decay a bounded history of mouse movement | River marks follow a passing gesture and then settle back without replacing their natural motion | [updateRiverInput](input.js#L32), [getRiverInputOffset](input.js#L68); consumed by [FlowParticle](noise-randomness.js#L983) and [LightParticle](noise-randomness.js#L1031) |
+| Apply local displacement to grass tips | Foreground grass follows the mouse direction with fixed roots | [updateGrassInput](input.js#L113), [getGrassInputOffset](input.js#L141); consumed by [GrassBlade](noise-randomness.js#L711) |
+| Load and crop the separate couple sprite once | Preserve a clear foreground figure without repeatedly processing the full asset | [preloadCoupleInput](input.js#L181), [setupCoupleInput](input.js#L187) |
+| Use elapsed time, boundary constraints and a smoothed sway | Arrow-key walking stays within the bank and eases into and out of its walking motion | [constrainCoupleToGrass](input.js#L216), [updateCoupleInput](input.js#L240) |
+| Track arrow input, opacity and foot depth | The couple appears on interaction, fades after inactivity, and grows nearer the bottom | [activateCoupleInput](input.js#L235), [getCoupleDepthScale](input.js#L209), [drawCoupleInput](input.js#L290), [keyPressed](input.js#L307) |
 
-**Important:** please read through AI-assisted code and understand it before presenting or building on it. Do not describe generated implementations as independently written. We have kept drafts, AI outputs and research material as required by the assessment rules.
+Current tuning: river radius 75 pixels; grass radius 90 pixels; walking speed 22.5 canvas pixels per second; maximum near scale 1.55 (55% larger). Position constraints reserve the largest footprint to avoid edge corrections caused solely by changing scale. The original `assets/couple.png` is not modified.
 
-## External references
+### Jiarong Sun (`ROoooonG`) — audio
 
-All are also commented at the point of use in the code.
+Primary module: [audio.js](audio.js); the volume interface is defined in [index.html](index.html) and styled in [style.css](style.css).
 
-- Vincent van Gogh, *Starry Night Over the Rhône*, 1888 — source artwork. Composition, palette and broken reflections inform the new drawing. The bitmap is sampled for colour and direction only; it is never displayed as the finished visual.
-- Petros Vrellis, *Starry Night* interactive animation, 2012 — <https://artof01.com/vrellis/works/starry_night.html>. Conceptual influence: brush direction treated as a flow field. No code used.
-- Painterly coastal animation reference — <https://xhslink.cn/o/9D56KGBAxiA>. Visual reference for layered water marks and directional grass. No code used.
-- p5.js 1.x — <https://p5js.org/>. Bundled in `libraries/`; third-party, not student code.
-- p5 `noise()` — <https://p5js.org/reference/p5/noise/>
-- p5 `randomSeed()` — <https://p5js.org/reference/p5/randomSeed/>
-- p5 `noiseSeed()` — <https://p5js.org/reference/p5/noiseSeed/>
-- MDN: CanvasRenderingContext2D — <https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D>
-- Structure tensor — <https://en.wikipedia.org/wiki/Structure_tensor>
-- k-means clustering — <https://en.wikipedia.org/wiki/K-means_clustering>
+| Functionality | Effect in the artwork | Traceable implementation |
+|---|---|---|
+| Load background music and handle browser audio unlocking | Music can accompany the scene after an accepted user gesture; visual initialization does not wait for the song | [initializeAudio](audio.js#L71), [unlockBackgroundAudio](audio.js#L63), [startBackgroundMusic](audio.js#L56) |
+| Analyse bass energy and smooth its response | Stronger bass increases water movement; the multiplier ranges from the natural baseline of 1 to 4.6 | [normalizedBand](audio.js#L91), [smoothAudioEnergy](audio.js#L96), [updateAudio](audio.js#L102) |
+| Analyse three separate star bands | Interleaved star groups brighten differently with musical detail instead of all pulsing identically | [AUDIO_SETTINGS](audio.js#L4), [updateAudio](audio.js#L102), [setStarMusicPulses](noise-randomness.js#L1578), [getStarMusicPulse](noise-randomness.js#L1584) |
+| Provide a volume panel and bounded visual compensation | Listening volume is adjustable; quiet playback retains star detail, while muting lets the musical response decay | [initializeVolumeControl](audio.js#L29), [updateAudio](audio.js#L102) |
 
-## Interaction instructions
+Two FFT analysers use 1024 bins. Water reads 60–250 Hz; stars use 500–1500, 1500–3000 and 3000–6000 Hz, with separate gains and attack/release times. These are frequency-energy responses, not beat or note detection. Natural star twinkle continues without musical input, and the time module still controls when stars are visible.
 
-**Right now the piece plays itself.** Nothing needs to be clicked for it to run:
+## How the four mechanics connect
 
-1. Open the page. An image exists in the DOM only to be sampled for colour — it will immediately be covered by paint.
-2. Over the first ~3 seconds the canvas paints itself in, layer by layer, from the large soft underpainting down to the fine detail dabs.
-3. It then animates continuously on a 15-second cycle: pending wiring for member input.
+[sketch.js](sketch.js) owns the single p5 lifecycle. `preload()` loads painting and couple assets; `setup()` initializes the textures and modules. Each `draw()` updates audio and input before calculating scene time and rendering.
 
-**Planned interactions (not yet connected in this repository):**
+| Producer | Consumer | Combined result |
+|---|---|---|
+| Time: `nightEffectVisibility(t)` | Noise: `setStarVisibility()` | Natural and musical stars follow the same sunset-to-night progression. |
+| Audio: `updateAudio()` | Noise: `setWaterRippleScale()` | Musical energy strengthens the existing noise-driven river motion. |
+| Audio: `setStarMusicPulses()` | Noise stars and time's `drawStarGlow()` | Painted stars and their overlaid glows share the same musical group response. |
+| Input: `getRiverInputOffset()` / `getGrassInputOffset()` | Noise particle and grass classes | Local mouse gestures are added to the underlying natural animation. |
+| Input: `drawCoupleInput()` | Final layer of `renderScene()` | The interactive couple remains visible above the painted scene and lighting overlays. |
 
-- **Mouse move** — pointer proximity will drive adjacent colours and mark density based on cursor distance.
-- **Space bar** — toggles between the segment grid and the source image.
-- **Click below the horizon** — `disturbWater(mouseX, mouseY)` starts a ripple ring at that point.
-- **Window resize** — the canvas keeps the painting's 5407:4191 ratio and re-fits without re-rolling the seed, so the composition stays recognisable.
+`disturbWater()` and `setStarTwinkleBoost()` remain available in the noise module, but the current input/audio modules do not call them. Random ripple rings still belong to the noise animation.
 
-## Known gaps
+## Development iterations and implementation scope
 
-This is a work in progress as at commit `Noise+Randomness 4`:
+- **Grass coverage:** the original foreground figures' image patch was removed and the area blended into the surrounding painted bank. [grassCoverAmount](noise-randomness.js#L1510) and [buildGrassBlades](noise-randomness.js#L763) support this coverage; the separate couple sprite provides the current interactive figures.
+- **Input integration:** the current implementation uses fading movement histories for water and grass, then adds keyboard walking, smooth sway, inactivity fading and depth scaling. It replaces the earlier documented grid/space-bar concept.
+- **Musical stars:** three frequency groups and separate response envelopes replace a single uniform musical brightness description. Gains remain configurable in `AUDIO_SETTINGS`.
 
-- `audio.js` now connects music playback and frequency analysis to the water and star hooks; see the audio section below.
-- `index.html` loads `audio.js`; `input.js` is still not connected to the group sketch.
-- `particle.js` and `randomnes.js` are empty leftovers from an earlier file-structure pass and can be deleted.
-- The rendering has **not** had a browser visual pass from the noise/randomness side yet; frame rate on large windows still needs checking.
-- Interface descriptions above marked "planned" should be verified against each owner's final code before submission.
+The project includes techniques beyond basic mouse, loop and variable exercises: [buildDirectionField](noise-randomness.js#L1376) uses a structure tensor, [buildPalette](noise-randomness.js#L1423) uses colour clustering, and several renderers use the browser Canvas 2D API through `drawingContext`. This README does not claim that every technique was covered in class. Course coverage should be checked against the actual teaching materials.
 
----
+## AI assistance and credits
 
-*This README was drafted by Tianyi Bo with AI assistance, following the Week 13 GitHub submission requirements of the IDEA9103 major assignment brief.*
+The existing project acknowledgement credits **Claude (Anthropic, Opus 5.5)** with assisting Tianyi Bo on the noise/randomness architecture, layered repainting, region motion, structure-tensor direction and colour batching, including drafting portions of `noise-randomness.js` and its comments. That attribution is retained from the project records; the module also contains its own acknowledgement.
 
+**OpenAI ChatGPT / Codex** assisted with the input module and its integration, grass coverage changes, couple movement and appearance, audio integration, debugging and documentation. This documentation pass translated remaining Chinese comments, consolidated repeated README material and linked descriptions to the current implementation. Earlier Codex assistance on the separate local `rhone-pigments` study is distinct from this repository. AI-assisted code should be reviewed and understood by the responsible members before presentation; the ownership table is not a claim that generated code was independently written.
 
-## Audio mechanic — Jiarong Sun
+### Artwork, visual and technical references
 
-Music loops automatically in the background. A translucent circular speaker button in the bottom-right corner opens a volume slider. Click outside or press Escape to close it; the slider can also mute the music at zero. If the browser blocks autoplay, the first click on the painting or key press activates audio. Bass drives water motion and treble drives star twinkle continuously while the song plays. Stars become visible during the night portion of the existing 15-second cycle.
+- Vincent van Gogh, *Starry Night Over the Rhône* (1888): source composition, palette and brushwork. Stored in `assets/Starry_Night_Over_the_Rhone.jpeg`.
+- [Petros Vrellis, Starry Night animation](https://artof01.com/vrellis/works/starry_night.html): conceptual reference for flowing brush directions; the existing project credits identify it as a visual/conceptual reference rather than a code source.
+- [Painterly coastal animation](https://xhslink.cn/o/9D56KGBAxiA): existing visual reference for water layers and directional grass.
+- [p5.js](https://p5js.org/), [noise](https://p5js.org/reference/p5/noise/), [randomSeed](https://p5js.org/reference/p5/randomSeed/), [noiseSeed](https://p5js.org/reference/p5/noiseSeed/), [p5.FFT](https://p5js.org/reference/p5.sound/p5.FFT/): library references. Bundled libraries are third-party code.
+- [CanvasRenderingContext2D](https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D), [structure tensor](https://en.wikipedia.org/wiki/Structure_tensor), [k-means clustering](https://en.wikipedia.org/wiki/K-means_clustering): technical background retained from the original README.
+- Music asset: `assets/Glimpse of Us.m4a`. Recording attribution, source and permitted use still need to be completed in the submission credits.
+- Figure asset: `assets/couple.png`, cropped in memory by the input module. Its asset provenance should be included in the final submission credits.
 
-`audio.js` uses two p5.sound FFT analysers with 1024 bins: the original analyser reads 60-250 Hz for water, while a separate star analyser lowers its minimum level to -120 dB to retain quiet musical details. Water uses a 0.09-second attack and 0.35-second release, scaling its motion from 1 to 4.6. Stars add direct musical brightness with independent band gains and envelopes, as described below. Low listening volumes receive bounded visual compensation; mute and stopped playback let the musical response decay to zero. Time still controls star visibility. Audio loading is independent of painting initialization, so a failed song does not stop the visual scene.
+## Remaining checks
 
-Tune frequency bands, gains and maximum boosts in `AUDIO_SETTINGS` at the top of `audio.js`. The analysis measures band energy, not beats or individual notes. Serve the folder over HTTP; the browser must support the supplied M4A encoding.
-
-Music: user-supplied file `Glimpse of Us.m4a`. Confirm the recording's artist, source and permitted use before finalising the submission credits.
-
-AI acknowledgement: OpenAI Codex assisted with the audio module, background playback, integration and documentation in this repository. Jiarong should review and understand the implementation and tune its artistic response before presenting it.
-
-Reference: [p5.sound FFT](https://p5js.org/reference/p5.sound/p5.FFT/), used through the locally bundled library.
-
-
-## Grass coverage iteration - 31 October 2026
-
-Tianyi requested that the two figures on the near bank be covered by the existing moving grass. The figures' original-image window and the no-grass exclusion around their upper bodies have been removed. Grass now grows continuously through that area. A soft, normalised oval region mixes the underlying stroke and blade colours with colours from the adjacent bank, so the figures do not reappear as dark silhouettes when the grass bends. Stroke directions inside the region also use the adjacent bank.
-
-ChatGPT/Codex assisted with this targeted change to `noise-randomness.js`. The new region calculation uses arithmetic, variables and functions (Weeks 2-3), conditions and a basic `for` loop (Week 4), `constrain` (Week 6) and numeric `lerp` (Week 11). It reuses the project's existing colour-sampling and drawing pipeline; this note is not a claim that all pre-existing implementation techniques are within the verified course scope.
-
-Validation: JavaScript syntax and whitespace checks passed. A self-contained copy was opened in VS Code's integrated browser; the near-bank grass covered the former figures while the grass animation and boat details remained visible. The original image asset was not edited.
-
-
-### Grouped musical star twinkle
-
-Stars are interleaved into three groups across the sky. Each group follows a separate band (500-1500 Hz, 1500-3000 Hz, or 3000-6000 Hz), with its own gain (0.7, 2, or 6) and attack/release timing. These bands and gains are tuned to the supplied song, whose upper treble is much weaker than its midrange. Soft compression keeps louder passages from clipping all groups to the same brightness. Star strokes and their overlaid glows share the same group response. Silent bands leave their group in slow natural twinkle; musical accents directly add brightness. Configure the bands and timing in `AUDIO_SETTINGS.starGroups` and overall strength in `starPulseStrength` in `audio.js`.
+Check the final experience in the intended browser, including audio unlocking, sustained frame rate, river/grass interaction and keyboard focus. Source inspection and syntax checks do not replace a full visual and audio test. The accessibility text in `sketch.js` still describes a fifteen-second loop; its runtime string was left unchanged during this comment-and-README-only edit and should be updated to reflect the 230-second cycle.

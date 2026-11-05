@@ -703,7 +703,7 @@ class TwinkleStar {
 // CLASS 3: GrassBlade — a long, thin, curving blade with a fixed root
 // ---------------------------------------------------------------------
 // Wind has two layers (idea from a p5.js reed-field piece on Xiaohongshu,
-// "芦海扁舟"): a LOW-frequency noise makes whole patches of grass rise and
+// "A Boat in a Sea of Reeds"): a LOW-frequency noise makes whole patches of grass rise and
 // fall together like waves, a MID-frequency noise adds each blade's own
 // small movement. Group waves first, individual movement second.
 const GRASS_SEGMENTS = 10;

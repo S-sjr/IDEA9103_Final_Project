@@ -1,5 +1,5 @@
 /*
- * Tao Yan — 留不住的河光 / Fleeting Riverlight
+ * Tao Yan — Fleeting Riverlight
  * AI assistance: OpenAI Codex helped draft this module and integration.
  * Classroom building blocks: variables, arithmetic, conditions, functions,
  * arrays, objects, loops, mouseX/mouseY, dist(), constrain().
@@ -164,7 +164,7 @@ let coupleX = 0;
 let coupleY = 0;
 let coupleHeight = 0;
 let coupleWidth = 0;
-let coupleNearScale = 1.55; // Up to 15% larger near the bottom
+let coupleNearScale = 1.55; // Up to 55% larger near the bottom
 let coupleWalkSpeed = 22.5; // Canvas pixels per second
 let coupleSway = 0;
 let coupleSwayDegrees = 1; // Maximum rotation to either side while walking.

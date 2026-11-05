@@ -13,7 +13,7 @@ body {
   place-items: center;
 }
 
-/* p5 初始化时创建的默认画布不参与页面布局。 */
+/* Exclude the default canvas created during p5 initialization from the page layout. */
 body > canvas {
   display: none;
 }

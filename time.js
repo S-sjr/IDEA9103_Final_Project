@@ -1,7 +1,7 @@
-// 日落到深夜的绘制效果与油画纹理工具。
-// setup() 和 draw() 统一放在 sketch.js，避免 p5 生命周期冲突。
+// Rendering effects and oil-paint texture utilities for the transition from sunset to late night.
+// Keep setup() and draw() in sketch.js to avoid conflicting p5 lifecycle functions.
 
-// ==================== RGB 渐变与时间 ====================
+// ==================== RGB gradients and timing ====================
 
 function mixRGBA(from, to, t) {
   return [
@@ -99,9 +99,9 @@ function drawGradient(t, strength = 1) {
   ctx.restore();
 }
 
-// ==================== 油画笔触工具 ====================
+// ==================== Oil-paint brushstroke utilities ====================
 
-// 固定随机种子，纹理不会逐帧改变
+// Use a fixed random seed so textures do not change from frame to frame.
 function oilRandom(seed) {
   let state = seed >>> 0;
 
@@ -131,7 +131,7 @@ function oilRGB(rgb, offset = 0) {
   return `rgb(${channels.join(',')})`;
 }
 
-// 厚涂短笔触：色块、暗边、亮色颜料脊与刷毛
+// Short impasto strokes: colour patches, dark edges, bright paint ridges and bristle marks.
 function oilBrush(
   ctx,
   x,
@@ -244,7 +244,7 @@ function oilGrain(ctx, w, h, seed, amount = 5) {
   ctx.putImageData(pixels, 0, 0);
 }
 
-// 不规则圆形边缘
+// Irregular circular outline
 function oilOrbOutline(ctx, center, radius) {
   ctx.beginPath();
 
@@ -270,7 +270,7 @@ function oilOrbOutline(ctx, center, radius) {
   ctx.closePath();
 }
 
-// ==================== 油画太阳与月亮 ====================
+// ==================== Oil-painted sun and moon ====================
 
 function buildOilOrb(kind) {
   const canvas = paintCanvas(
@@ -300,7 +300,7 @@ function buildOilOrb(kind) {
         [252, 246, 214]
       ];
 
-  // 断续弧形笔触组成光晕
+  // Build the halo from broken, curved brushstrokes.
   for (let i = 0; i < 160; i++) {
     const a = random() * Math.PI * 2;
     const distance = r + 4 + random() * 33;
@@ -432,14 +432,14 @@ function drawSun(t, layerOpacity = 1) {
 
   if (opacity <= 0) return;
 
-  // 水平位置：从右侧向左侧移动
+  // Horizontal position: move from right to left.
   const x = width * lerp(
     SUN_START_X,
     SUN_END_X,
     travel
   );
 
-  // 垂直位置：使用二次曲线形成弧形轨迹
+  // Vertical position: use a quadratic curve to create an arcing path.
   const remaining = 1 - travel;
 
   const y = height * (
@@ -453,12 +453,12 @@ function drawSun(t, layerOpacity = 1) {
 
   ctx.save();
 
-  // 将太阳限制在天空内，落下后由地平线遮挡
+  // Keep the sun within the sky and hide it behind the horizon as it sets.
   ctx.beginPath();
   ctx.rect(0, 0, width, height * HORIZON);
   ctx.clip();
 
-  // 使用原有的油画太阳纹理
+  // Use the existing oil-painted sun texture.
   drawOilOrb(oilSun, x, y, radius, opacity);
 
   ctx.restore();
@@ -473,14 +473,14 @@ function drawMoon(t) {
 
   if (opacity <= 0) return;
 
-  // 水平位置：向左侧移动
+  // Horizontal position: move to the left.
   const x = width * lerp(
     MOON_START_X,
     MOON_END_X,
     rise
   );
 
-  // 垂直位置：从地平线附近升到上空
+  // Vertical position: rise from near the horizon into the sky.
   const y = height * lerp(
     MOON_START_Y,
     MOON_END_Y,
@@ -489,12 +489,12 @@ function drawMoon(t) {
 
   const radius = width * 0.018;
 
-  // 使用原有的油画月亮纹理
+  // Use the existing oil-painted moon texture.
   drawOilOrb(oilMoon, x, y, radius, opacity);
 }
 
 
-// ==================== 油画云层 ====================
+// ==================== Oil-painted clouds ====================
 
 function cloudNoise(x, y) {
   const ix = Math.floor(x);
@@ -598,7 +598,7 @@ function buildCloudLayers() {
         0.55
       );
 
-      // 星点位置使用不透明云核
+      // Use opaque cloud cores at star positions.
       for (const [sx, sy] of CLOUD_STAR_POINTS) {
         const d = Math.hypot(
           (nx - sx) / 0.090,
@@ -779,7 +779,7 @@ function drawClouds(t) {
     cloudTint.height
   );
 
-  // 混合两个时刻的云纹理，保持云核不透明
+  // Blend cloud textures from two time steps while keeping the cloud cores opaque.
   buffer.globalAlpha = 1 - amount;
   buffer.drawImage(cloudPaintFrames[index], 0, 0);
 
@@ -811,7 +811,7 @@ function drawClouds(t) {
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = opacity;
 
-  // 云层只画在天空内
+  // Draw clouds only within the sky.
   ctx.beginPath();
   ctx.moveTo(0, 0);
   ctx.lineTo(width, 0);
@@ -844,7 +844,7 @@ function drawClouds(t) {
   ctx.restore();
 }
 
-// ==================== 星光与灯光倒影 ====================
+// ==================== Starlight and reflected lamplight ====================
 
 function glow(x, y, radius, rgb, opacity) {
   if (opacity <= 0 || radius <= 0) return;

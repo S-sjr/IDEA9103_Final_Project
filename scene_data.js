@@ -1,12 +1,12 @@
-// 场景参数、配色与画作中的坐标。
-// 由 index.html 在 time.js 和 sketch.js 之前加载。
+// Scene parameters, palettes and coordinates within the painting.
+// Loaded by index.html before time.js and sketch.js.
 
-// ==================== 时间与效果参数 ====================
+// ==================== Timing and effect parameters ====================
 
 
-const DURATION = 15000;            // 日落到夜晚：15 秒
-const SUNSET_HOLD_DURATION = 5000; // 开头日落停留：5 秒
-const NIGHT_HOLD_DURATION = 210000; // 3 分 30 秒
+const DURATION = 15000;            // Sunset-to-night transition: 15 seconds
+const SUNSET_HOLD_DURATION = 5000; // Opening sunset hold: 5 seconds
+const NIGHT_HOLD_DURATION = 210000; // 3 minutes 30 seconds
 
 const CYCLE_DURATION =
   SUNSET_HOLD_DURATION + DURATION + NIGHT_HOLD_DURATION;
@@ -14,35 +14,35 @@ const CANVAS_WIDTH = 1024;
 const HORIZON = 0.43;
 const EFFECT_STRENGTH = 0.9;
 
-// 模拟时间：18:00 → 24:00
-// 21:00 对应动画第 7.5 秒
+// Simulated time: 18:00 → 24:00
+// 21:00 corresponds to 7.5 seconds into the transition, after the opening hold.
 const NIGHT_EFFECT_START_HOUR = 21;
 const NIGHT_EFFECT_FULL_HOUR = 21.5;
 
-// 太阳与月亮的油画纹理尺寸
+// Oil-paint texture dimensions for the sun and moon
 const OIL_ORB_SIZE = 224;
 const OIL_ORB_RADIUS = 64;
 
-// 太阳：右侧 → 左侧
+// Sun: right → left
 const SUN_START_X = 0.90;
 const SUN_END_X = 0.30;
 
 const SUN_START_Y = 0.18;
-const SUN_CONTROL_Y = 0.10; // 控制弧线高度
+const SUN_CONTROL_Y = 0.10; // Controls the height of the arc
 const SUN_END_Y = 0.46;
 
-// 太阳在渐变过程的前半段完成下落
+// The sun finishes setting during the first half of the transition.
 const SUN_TRAVEL_END = 0.50;
 
-// 接近落点时快速淡出
+// Fade out quickly as the sun approaches its setting point.
 const SUN_FADE_START = 0.36;
 const SUN_FADE_END = SUN_TRAVEL_END;
 
-// 下落时逐渐进入云层后方
+// Gradually move behind the clouds while setting.
 const SUN_FRONT_START = 0.28;
 const SUN_FRONT_END = 0.46;
 
-// 月亮：从太阳落点附近升向左上方
+// Moon: rise from near the sunset position towards the upper left.
 const MOON_APPEAR_START = SUN_TRAVEL_END;
 const MOON_START_X = SUN_END_X;
 const MOON_END_X = 0.14;
@@ -50,20 +50,20 @@ const MOON_END_X = 0.14;
 const MOON_START_Y = 0.40;
 const MOON_END_Y = 0.12;
 
-// RGB 渐变随时间淡出，13.5 秒时完全消失
+// The RGB gradient fades out completely 13.5 seconds into the transition.
 const GRADIENT_FADE_START = 0;
 const GRADIENT_FADE_END = 0.90;
 
-// 云层逐渐散开
+// Clouds gradually disperse.
 const CLOUD_SKY_HEIGHT = 0.405;
 const CLOUD_CLEAR_START = 0.30;
 const CLOUD_CLEAR_END = 0.80;
 
 const RGB_TIMES = [0, 0.5, 1];
 
-// 每个时刻：
-// [天空顶部颜色, 地平线颜色, 水面颜色]
-// 每种颜色：[R, G, B, A]
+// At each time point:
+// [upper-sky colour, horizon colour, water colour]
+// Each colour: [R, G, B, A]
 const RGB_PALETTE = [
   [
     [112, 63, 131, 70],
@@ -82,7 +82,7 @@ const RGB_PALETTE = [
   ]
 ];
 
-// 云层颜色：日落 → 暮色 → 夜晚
+// Cloud colours: sunset → dusk → night
 const CLOUD_PALETTE = [
   [
     [217, 181, 192, 255],
@@ -98,7 +98,7 @@ const CLOUD_PALETTE = [
   ]
 ];
 
-// 坐标按照原图宽、高的比例设置
+// Coordinates are expressed as proportions of the source image width and height.
 const STAR_POINTS = [
   [0.049, 0.183, 0.9],
   [0.114, 0.037, 0.65],
@@ -120,7 +120,7 @@ const STAR_POINTS = [
   [0.394, 0.263, 0.6]
 ];
 
-// 云层也遮住原图中较小的星点
+// Clouds also cover the smaller stars in the source image.
 const CLOUD_STAR_POINTS = [
   ...STAR_POINTS,
   [0.374, 0.009],
@@ -137,7 +137,7 @@ const CLOUD_STAR_POINTS = [
   [0.340, 0.246]
 ];
 
-// 天空边界，避开教堂尖顶与建筑
+// Sky boundary, excluding church spires and buildings
 const CLOUD_SKYLINE = [
   [0, 0.355],
   [0.035, 0.340],
@@ -184,7 +184,7 @@ const LAMP_POINTS = [
   [0.947, 0.465]
 ];
 
-// [水平位置, 倒影起点, 倒影长度]
+// [horizontal position, reflection start, reflection length]
 const REFLECTIONS = [
   [0.170, 0.51, 0.13],
   [0.280, 0.51, 0.19],
