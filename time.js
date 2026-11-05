@@ -888,8 +888,8 @@ function drawStarGlow(t) {
     const twinkle =
       0.83 +
       0.17 * Math.sin(
-        effectSeconds * 1.7 + i * 2.4
-      );
+        millis() / 1000 * 0.12 + i * 2.4
+      ) + getStarMusicPulse(i) * 0.25;
 
     const x = sx * width;
     const y = sy * height;

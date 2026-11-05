@@ -180,7 +180,8 @@ let noiseTable;
 let externalInfluence = {
   starVisibility: 1,
   waterRippleScale: 1,
-  starTwinkleBoost: 1
+  starTwinkleBoost: 1,
+  starMusicPulses: [0, 0, 0]
 };
 
 
@@ -291,7 +292,7 @@ function initializeNoiseRandomness(sourceImage, seed) {
   for (let i = 0; i < 4; i++) cloudWisps.push(new CloudWisp(random(0.2, 0.7)));
 
   // Stars
-  twinkleStars = STAR_POSITIONS.map(p => new TwinkleStar(p[0], p[1], p[2], colourSources.main));
+  twinkleStars = STAR_POSITIONS.map((p, i) => new TwinkleStar(p[0], p[1], p[2], colourSources.main, i));
 
   // Empty canvas to paint on
   staticLayer = createGraphics(width, height);
@@ -588,14 +589,15 @@ class BrushStroke {
 // CLASS 2: TwinkleStar — Van Gogh star: core, halo of strokes, glow
 // ---------------------------------------------------------------------
 class TwinkleStar {
-  constructor(xRatio, yRatio, size, colourSource) {
+  constructor(xRatio, yRatio, size, colourSource, starIndex) {
+    this.starIndex = starIndex;
     this.xRatio = xRatio;
     this.yRatio = yRatio;
     this.size = size;
 
     // random(): every star has its own character
     this.twinkleStrength = random(0.3, 1.6);   // barely flickers ... flares
-    this.twinkleSpeed = random(0.5, 2.6);
+    this.twinkleSpeed = random(0.02, 0.10); // Slow natural twinkle without music.
     this.noiseOffset = random(NOISE_TABLE_SIZE);
     this.moodOffset = random(NOISE_TABLE_SIZE);   // slow change of strength
     this.rayAngle = random(TWO_PI);
@@ -632,10 +634,12 @@ class TwinkleStar {
     // Personal twinkle from Perlin noise, scaled by this star's random strength
     let n = noiseTableAt(this.noiseOffset + flowTime * 140 * this.twinkleSpeed);
     // the star's strength also wanders slowly: calm → bursting → calm
-    let mood = noiseTableAt(this.moodOffset + flowTime * 25);
+    let mood = noiseTableAt(this.moodOffset + flowTime);
     let strength = this.twinkleStrength * (0.2 + 1.6 * mood) *
                    motionSettings.starTwinkle * externalInfluence.starTwinkleBoost;
-    let twinkle = constrain(1 + (n - 0.45) * 2.6 * strength, 0.2, 3.2);
+    // Music directly raises the light level, independently of the noise phase.
+    let naturalTwinkle = constrain(1 + (n - 0.45) * 0.6 * strength, 0.65, 1.35);
+    let twinkle = constrain(naturalTwinkle + getStarMusicPulse(this.starIndex), 0.2, 3.2);
     let light = externalInfluence.starVisibility * reveal;
 
     // Glow first (behind the strokes)
@@ -1568,6 +1572,18 @@ function setWaterRippleScale(scale) {
 // Audio (Jiarong): treble → stronger twinkle, e.g. map(treble, 0, 255, 1, 3)
 function setStarTwinkleBoost(boost) {
   externalInfluence.starTwinkleBoost = max(0, boost);
+}
+
+// Audio: a direct brightness pulse, rather than amplification of random twinkle.
+function setStarMusicPulses(pulses) {
+  externalInfluence.starMusicPulses = pulses.map(pulse => constrain(pulse, 0, 2));
+}
+
+// Interleave the groups across the sky. Both star strokes and time-layer glows
+// use the same index so each star's two visual layers respond together.
+function getStarMusicPulse(starIndex) {
+  const pulses = externalInfluence.starMusicPulses;
+  return pulses[starIndex % pulses.length] || 0;
 }
 
 // Input (Tao): start a strong ripple ring on the water, e.g. on mouse

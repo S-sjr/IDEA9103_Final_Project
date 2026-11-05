@@ -145,7 +145,7 @@ This is a work in progress as at commit `Noise+Randomness 4`:
 
 Music loops automatically in the background. A translucent circular speaker button in the bottom-right corner opens a volume slider. Click outside or press Escape to close it; the slider can also mute the music at zero. If the browser blocks autoplay, the first click on the painting or key press activates audio. Bass drives water motion and treble drives star twinkle continuously while the song plays. Stars become visible during the night portion of the existing 15-second cycle.
 
-`audio.js` uses the bundled p5.sound FFT with 1024 bins. It analyses 60–250 Hz for the water and 2000–8000 Hz for the stars, normalises the band energies to 0–1 with a small silence threshold, and smooths them with a 0.09-second attack and 0.35-second release. Water motion is scaled from 1 to 2.8 and star twinkle strength from 1 to 3 through Tianyi's existing hooks. When music is not playing, both multipliers smoothly return to 1. Time still controls star visibility. Audio loading is independent of painting initialization, so a failed song does not stop the visual scene.
+`audio.js` uses two p5.sound FFT analysers with 1024 bins: the original analyser reads 60-250 Hz for water, while a separate star analyser lowers its minimum level to -120 dB to retain quiet musical details. Water uses a 0.09-second attack and 0.35-second release, scaling its motion from 1 to 4.6. Stars add direct musical brightness with independent band gains and envelopes, as described below. Low listening volumes receive bounded visual compensation; mute and stopped playback let the musical response decay to zero. Time still controls star visibility. Audio loading is independent of painting initialization, so a failed song does not stop the visual scene.
 
 Tune frequency bands, gains and maximum boosts in `AUDIO_SETTINGS` at the top of `audio.js`. The analysis measures band energy, not beats or individual notes. Serve the folder over HTTP; the browser must support the supplied M4A encoding.
 
@@ -163,3 +163,8 @@ Tianyi requested that the two figures on the near bank be covered by the existin
 ChatGPT/Codex assisted with this targeted change to `noise-randomness.js`. The new region calculation uses arithmetic, variables and functions (Weeks 2-3), conditions and a basic `for` loop (Week 4), `constrain` (Week 6) and numeric `lerp` (Week 11). It reuses the project's existing colour-sampling and drawing pipeline; this note is not a claim that all pre-existing implementation techniques are within the verified course scope.
 
 Validation: JavaScript syntax and whitespace checks passed. A self-contained copy was opened in VS Code's integrated browser; the near-bank grass covered the former figures while the grass animation and boat details remained visible. The original image asset was not edited.
+
+
+### Grouped musical star twinkle
+
+Stars are interleaved into three groups across the sky. Each group follows a separate band (500-1500 Hz, 1500-3000 Hz, or 3000-6000 Hz), with its own gain (0.7, 2, or 6) and attack/release timing. These bands and gains are tuned to the supplied song, whose upper treble is much weaker than its midrange. Soft compression keeps louder passages from clipping all groups to the same brightness. Star strokes and their overlaid glows share the same group response. Silent bands leave their group in slow natural twinkle; musical accents directly add brightness. Configure the bands and timing in `AUDIO_SETTINGS.starGroups` and overall strength in `starPulseStrength` in `audio.js`.
